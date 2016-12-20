@@ -1922,9 +1922,13 @@ namespace System.Management.Automation.Language
                 case TokenKind.Configuration:
                     statement = ConfigurationStatementRule(attributes != null ? attributes.OfType<AttributeAst>() : null, token);
                     break;
+                case TokenKind.Dsl:
+                    statement = DslStatementRule(token);
+                    break;
                 case TokenKind.From:
                 case TokenKind.Define:
                 case TokenKind.Var:
+                case TokenKind.Keyword:
                     ReportError(token.Extent, () => ParserStrings.ReservedKeywordNotAllowed, token.Kind.Text());
                     statement = new ErrorStatementAst(token.Extent);
                     break;
@@ -2753,6 +2757,7 @@ namespace System.Management.Automation.Language
 
                 ExpressionAst configurationBodyScriptBlock = null;
 
+
                 // Automatically import the PSDesiredStateConfiguration module at this point.
                 PowerShell p = null;
 
@@ -3020,6 +3025,102 @@ namespace System.Management.Automation.Language
                 var restorePoint = _tokenizer.GetRestorePoint();
                 Resync(restorePoint);
             }
+        }
+
+        private StatementAst DslStatementRule(Token dslToken)
+        {
+            IScriptExtent startExtent = dslToken.Extent;
+            IScriptExtent endErrorStatement = startExtent;
+
+            bool isError = false;
+
+            ExpressionAst dslName;
+            string dslNameValue = null;
+
+            SkipNewlines();
+
+            Token dslNameToken = NextToken();
+            Token dslKeywordToken = dslNameToken;
+
+            // If the DSL name was left out, throw a helpful error
+
+            if (dslNameToken.Kind == TokenKind.LCurly)
+            {
+                // TODO: Enter an error string entry
+                ReportError(After(startExtent), () => ParserStrings.MissingDslName);
+                return null;
+            }
+
+            if (dslNameToken.Kind == TokenKind.EndOfInput)
+            {
+                UngetToken(dslNameToken);
+                ReportIncompleteInput(After(dslNameToken.Extent), () => ParserStrings.MissingDslName);
+                return null;
+            }
+
+            UngetToken(dslNameToken);
+            dslName = GetWordOrExpression(dslNameToken);
+
+            if (dslName == null)
+            {
+                isError = true;
+                ReportIncompleteInput(dslNameToken.Extent, () => ParserStrings.MissingDslName);
+            }
+            else
+            {
+                object outValue;
+                if (IsConstantValueVisitor.IsConstant(dslName, out outValue))
+                {
+                    dslNameValue = outValue as string;
+                    if (dslNameValue == null ||
+                        !System.Text.RegularExpressions.Regex.IsMatch(dslNameValue, "^[A-Za-z][A-Za-z0-9_./-]*$"))
+                    {
+                        isError = true;
+                        ReportError(dslName.Extent, () => ParserStrings.InvalidConfigurationName, dslNameValue ?? string.Empty);
+                    }
+                }
+            }
+
+            SkipNewlines();
+
+            ExpressionAst dslBodyScriptBlock = null;
+
+            Token lCurly = NextToken();
+            if (lCurly.Kind != TokenKind.LCurly)
+            {
+                ReportIncompleteInput(After(lCurly.Extent), () => ParserStrings.MissingCurlyInDslStatement);
+                isError = true;
+                UngetToken(lCurly);
+            }
+            else
+            {
+                dslBodyScriptBlock = ScriptBlockExpressionRule(lCurly);
+
+                if (dslBodyScriptBlock == null)
+                {
+                    ReportError(After(lCurly.Extent), () => ParserStrings.DslBodyEmpty);
+                    return null;
+                }
+            }
+
+            if (isError)
+            {
+                return new ErrorStatementAst(ExtentOf(startExtent, endErrorStatement), dslToken);
+            }
+
+            #region "Add DSL Keywords"
+
+            #endregion
+
+            // End DSL Dynamic Keyword Addition
+            // ################################################################################
+            // ################################################################################
+
+            var restorePoint = _tokenizer.GetRestorePoint();
+            Resync(restorePoint);
+
+            ReportError(dslToken.Extent, () => "DslToken parsed");
+            return null;
         }
 
         private Dictionary<string, DynamicKeyword> _configurationKeywordsDefinedInThisFile;

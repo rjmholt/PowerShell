@@ -967,11 +967,17 @@ Possible matches are</value>
   <data name="MissingCurlyInConfigurationStatement" xml:space="preserve">
     <value>Missing '{' in configuration statement.</value>
   </data>
+  <data name="MissingCurlyInDslStatement" xml:space="preserve">
+    <value>Missing '{' in dsl statement.</value>
+  </data>
   <data name="ExceptionParsingMOFFile" xml:space="preserve">
     <value>Exception parsing MOF file '{0}':{1}.</value>
   </data>
   <data name="MissingConfigurationName" xml:space="preserve">
     <value>The name for the configuration is missing. Provide the missing name as a simple name, string, or string-valued expression.</value>
+  </data>
+  <data name="MissingDslName" xml:space="preserve">
+    <value>The name for the dsl is missing. Provide the missing name as a simple name, string or string-valued expression.</value>
   </data>
   <data name="MissingRequiredResourcesArgument" xml:space="preserve">
     <value>Missing argument to -Resources. The argument to the -Resource parameter must be a comma-separated list of names or constant strings naming modules to reference for resource type definitions.</value>
@@ -997,6 +1003,9 @@ Possible matches are</value>
   </data>
   <data name="ConfigurationBodyEmpty" xml:space="preserve">
     <value>The configuration block results were null or empty. Verify that configurations were defined in the block.</value>
+  </data>
+  <data name="DslBodyEmpty" xml:space="preserve">
+    <value>The dsl block results were null or empty. Verify that a dsl was defined in the block.</value>
   </data>
   <data name="UnexpectedNameForType" xml:space="preserve">
     <value>The '{0}' resource can only be used once per configuration, and therefore cannot have a name. Remove '{1}', and then run the script again.</value>
