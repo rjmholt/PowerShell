@@ -3027,11 +3027,40 @@ namespace System.Management.Automation.Language
             }
         }
 
+        /// <summary>
+        /// Parses a block delineated by the `dsl` keyword for a DSL schema
+        /// </summary>
+        /// <param name="dslToken">the dsl block as a token</param>
+        /// <returns>a statement AST node representing the parsed DSL schema</returns>
         private StatementAst DslStatementRule(Token dslToken)
         {
+            //G  dsl-statement:
+            //G    'dsl' new-lines:opt single-name-expression new-lines:opt dsl-define-block
+            //G  
+            //G  single-name-expression:
+            //G      command-argument
+            //G      primary-expression
+            //G
+            //G  dsl-define-block:
+            //G    '{' new-lines:opt keywords-and-attributes new-lines:opt '}'
+            //G
+            //G  keywords-and-attributes:
+            //G    keyword-definition keywords-and-attributes
+            //G    attribute-definition keywords-and-attributes
+            //G    keyword-definition
+            //G    attribute-definition
+            //G
+            //G  keyword-definition:
+            //G    'keyword' single-name-expression [params] dsl-define-block
+            //G
+            //G  attribute-definition:
+            //G    single-name-expression [params]
+
+            // Record the extent for helpful error messages
             IScriptExtent startExtent = dslToken.Extent;
             IScriptExtent endErrorStatement = startExtent;
 
+            // Keep track of the error state so that we can finish parsing before reporting the error
             bool isError = false;
 
             ExpressionAst dslName;
@@ -3061,6 +3090,7 @@ namespace System.Management.Automation.Language
             UngetToken(dslNameToken);
             dslName = GetWordOrExpression(dslNameToken);
 
+            // Make sure the DSL is given a correct name, and report the error if not
             if (dslName == null)
             {
                 isError = true;
@@ -3083,6 +3113,7 @@ namespace System.Management.Automation.Language
 
             SkipNewlines();
 
+            // Process the scriptblock expected as the body of the DSL definition
             ExpressionAst dslBodyScriptBlock = null;
 
             Token lCurly = NextToken();
@@ -3094,6 +3125,7 @@ namespace System.Management.Automation.Language
             }
             else
             {
+                // Obtain the block within the DSL
                 dslBodyScriptBlock = ScriptBlockExpressionRule(lCurly);
 
                 if (dslBodyScriptBlock == null)
@@ -3103,12 +3135,37 @@ namespace System.Management.Automation.Language
                 }
             }
 
+
             if (isError)
             {
                 return new ErrorStatementAst(ExtentOf(startExtent, endErrorStatement), dslToken);
             }
 
             #region "Add DSL Keywords"
+
+            var scAst = dslName as StringConstantExpressionAst;
+            if (scAst != null)
+            {
+                var topDslKeyword = new DynamicKeyword
+                {
+                    BodyMode = DynamicKeywordBodyMode.ScriptBlock,
+                    ImplementingModule = _keywordModuleName,
+                    Keyword = scAst.Value,
+                    NameMode = DynamicKeywordNameMode.NoName,
+                };
+
+                var sbeAst = dslBodyScriptBlock as ScriptBlockExpressionAst;
+                if (sbeAst != null)
+                {
+                    // Process all the statements in the scriptblock expression for
+                    // defining the schema
+                    foreach (var dslDefinitionBlockStatement in sbeAst.ScriptBlock.ProcessBlock.Statements)
+                    {
+                    }
+                }
+
+                DynamicKeyword.AddKeyword(topDslKeyword);
+            }
 
             #endregion
 

@@ -281,7 +281,7 @@ namespace System.Management.Automation.Language
         public string ResourceName { get; set; }
 
         /// <summary>
-        /// Set to true if we should be looking for a scriptblock instead of a hashtable
+        /// Describes whether a Command (no body), ScriptBlock or Hashtable is looked for
         /// </summary>
         public DynamicKeywordBodyMode BodyMode { get; set; }
 
