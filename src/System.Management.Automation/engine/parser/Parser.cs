@@ -3046,29 +3046,74 @@ namespace System.Management.Automation.Language
             //G  dsl-define-block:
             //G    '{' new-lines:opt keywords-and-attributes new-lines:opt '}'
             //G
-            //G  keywords-and-attributes:
-            //G    keyword-definition keywords-and-attributes
-            //G    attribute-definition keywords-and-attributes
+            //G  keywords-and-properties:
+            //G    keyword-definition keywords-and-properties
+            //G    property-definition keywords-and-properties
             //G    keyword-definition
-            //G    attribute-definition
-            //G
-            //G  keyword-definition:
-            //G    'keyword' single-name-expression [params] dsl-define-block
-            //G
-            //G  attribute-definition:
-            //G    single-name-expression [params]
+            //G    property-definition
 
             // TODO: Parse the DSL name
+            SkipNewlines();
 
-                // TODO: Check name is given
-                // TODO: Add the name as top level keyword
-                // TODO: Expect the left curly
+            // Check name is given
+            Token dslNameToken;
+            var dslName = SimpleNameRule(out dslNameToken);
+            if (dslName == null)
+            {
+                ReportIncompleteInput(After(dslToken), () => ParserStrings.MissingDslName);
+                return new ErrorStatementAst(dslToken.Extent);
+            }
 
-            // TODO: Collect keyword definitions
+            // Add the name as top level keyword
+            DynamicKeyword dslKeyword = new DynamicKeyword
+            {
+                BodyMode = DynamicKeywordBodyMode.ScriptBlock,
+                ImplementingModule = _keywordModuleName,
+                Keyword = dslName.Value,
+                NameMode = DynamicKeywordNameMode.NoName,
+            };
 
-            // TODO: Add the keywords into the top level keyword
+            SkipNewlines();
+
+            // Expect the left curly and address any errors if not
+            Token lCurly = NextToken();
+            if (lCurly.Kind != TokenKind.LCurly)
+            {
+                UngetToken(lCurly);
+                ReportIncompleteInput(After(dslName), () => ParserStrings.DslBodyEmpty, dslToken.Kind.Text());
+                return new ErrorStatementAst(ExtentOf(dslToken, dslName));
+            }
+
+            // Collect keyword definitions
+            IScriptExtent lastExtent = lCurly.Extent;
+            StatementAst currKeywordStmt;
+            List<StatementAst> keywordStmts = new List<StatementAst>();
+
+            while ((currKeywordStmt = DslKeywordRule(dslKeyword)) != null)
+            {
+                keywordStmts.Add(currKeywordStmt);
+                lastExtent = currKeywordStmt.Extent;
+            }
+
+
+            // Check the block is finished correctly
+            var rCurly = NextToken();
+            if (rCurly.Kind != TokenKind.RCurly)
+            {
+                UngetToken(rCurly);
+                ReportIncompleteInput(lastExtent, () => ParserStrings.MissingEndCurlyBrace);
+            }
+            else
+            {
+                lastExtent = rCurly.Extent;
+            }
 
             // TODO: Return the parsed DSL AST node
+                // TODO: Define an AST type for DSL blocks
+                // TODO: Figure out "custom attributes" and "nested ASTs"
+                // TODO: Load an instance of this AST type with the elements so far and return it
+
+            ReportError(After(dslToken), () => "DSL block parsed");
 
             return null;
         }
@@ -3080,10 +3125,12 @@ namespace System.Management.Automation.Language
         /// <param name="enclosingKeyword">the enclosing scope, controlled by the keyword used</param>
         /// <param name="keywordToken">the keyword statement as a token</param>
         /// <returns>a statement AST node denoting a parsed keyword definition</returns>
-        private StatementAst DslKeywordRule(DynamicKeyword enclosingKeyword, Token keywordToken)
+        private StatementAst DslKeywordRule(DynamicKeyword enclosingKeyword)
         {
-            // TODO: Parse keyword name
+            //G  keyword-definition:
+            //G    'keyword' single-name-expression [params] dsl-define-block
 
+            // TODO: Parse keyword name
             // TODO: Add keyword to DynamicKeyword context
 
             // TODO: Parse parameters ?
@@ -3106,8 +3153,11 @@ namespace System.Management.Automation.Language
         /// <param name="enclosingKeyword"></param>
         /// <param name="attrToken"></param>
         /// <returns></returns>
-        private StatementAst DslAttributeRule(DynamicKeyword enclosingKeyword, Token attrToken)
+        private StatementAst DslPropertyRule(DynamicKeyword enclosingKeyword, Token attrToken)
         {
+            //G  property-definition:
+            //G    single-name-expression [params]
+
             return null;
         }
 
