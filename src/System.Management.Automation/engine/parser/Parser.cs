@@ -1923,12 +1923,11 @@ namespace System.Management.Automation.Language
                     statement = ConfigurationStatementRule(attributes != null ? attributes.OfType<AttributeAst>() : null, token);
                     break;
                 case TokenKind.Dsl:
-                    statement = DslStatementRule(token);
+                    statement = DslDefinitionRule(token);
                     break;
                 case TokenKind.From:
                 case TokenKind.Define:
                 case TokenKind.Var:
-                case TokenKind.Keyword:
                     ReportError(token.Extent, () => ParserStrings.ReservedKeywordNotAllowed, token.Kind.Text());
                     statement = new ErrorStatementAst(token.Extent);
                     break;
@@ -3027,12 +3026,15 @@ namespace System.Management.Automation.Language
             }
         }
 
+        private Dictionary<string, DynamicKeyword> _configurationKeywordsDefinedInThisFile;
+
         /// <summary>
-        /// Parses a block delineated by the `dsl` keyword for a DSL schema
+        /// Parses a block delineated by the `dsl` keyword for a DSL schema and adds the
+        /// named DSL as a keyword in the global context
         /// </summary>
         /// <param name="dslToken">the dsl block as a token</param>
         /// <returns>a statement AST node representing the parsed DSL schema</returns>
-        private StatementAst DslStatementRule(Token dslToken)
+        private StatementAst DslDefinitionRule(Token dslToken)
         {
             //G  dsl-statement:
             //G    'dsl' new-lines:opt single-name-expression new-lines:opt dsl-define-block
@@ -3056,131 +3058,69 @@ namespace System.Management.Automation.Language
             //G  attribute-definition:
             //G    single-name-expression [params]
 
-            // Record the extent for helpful error messages
-            IScriptExtent startExtent = dslToken.Extent;
-            IScriptExtent endErrorStatement = startExtent;
+            // TODO: Parse the DSL name
 
-            // Keep track of the error state so that we can finish parsing before reporting the error
-            bool isError = false;
+                // TODO: Check name is given
+                // TODO: Add the name as top level keyword
+                // TODO: Expect the left curly
 
-            ExpressionAst dslName;
-            string dslNameValue = null;
+            // TODO: Collect keyword definitions
 
-            SkipNewlines();
+            // TODO: Add the keywords into the top level keyword
 
-            Token dslNameToken = NextToken();
-            Token dslKeywordToken = dslNameToken;
+            // TODO: Return the parsed DSL AST node
 
-            // If the DSL name was left out, throw a helpful error
-
-            if (dslNameToken.Kind == TokenKind.LCurly)
-            {
-                // TODO: Enter an error string entry
-                ReportError(After(startExtent), () => ParserStrings.MissingDslName);
-                return null;
-            }
-
-            if (dslNameToken.Kind == TokenKind.EndOfInput)
-            {
-                UngetToken(dslNameToken);
-                ReportIncompleteInput(After(dslNameToken.Extent), () => ParserStrings.MissingDslName);
-                return null;
-            }
-
-            UngetToken(dslNameToken);
-            dslName = GetWordOrExpression(dslNameToken);
-
-            // Make sure the DSL is given a correct name, and report the error if not
-            if (dslName == null)
-            {
-                isError = true;
-                ReportIncompleteInput(dslNameToken.Extent, () => ParserStrings.MissingDslName);
-            }
-            else
-            {
-                object outValue;
-                if (IsConstantValueVisitor.IsConstant(dslName, out outValue))
-                {
-                    dslNameValue = outValue as string;
-                    if (dslNameValue == null ||
-                        !System.Text.RegularExpressions.Regex.IsMatch(dslNameValue, "^[A-Za-z][A-Za-z0-9_./-]*$"))
-                    {
-                        isError = true;
-                        ReportError(dslName.Extent, () => ParserStrings.InvalidConfigurationName, dslNameValue ?? string.Empty);
-                    }
-                }
-            }
-
-            SkipNewlines();
-
-            // Process the scriptblock expected as the body of the DSL definition
-            ExpressionAst dslBodyScriptBlock = null;
-
-            Token lCurly = NextToken();
-            if (lCurly.Kind != TokenKind.LCurly)
-            {
-                ReportIncompleteInput(After(lCurly.Extent), () => ParserStrings.MissingCurlyInDslStatement);
-                isError = true;
-                UngetToken(lCurly);
-            }
-            else
-            {
-                // Obtain the block within the DSL
-                dslBodyScriptBlock = ScriptBlockExpressionRule(lCurly);
-
-                if (dslBodyScriptBlock == null)
-                {
-                    ReportError(After(lCurly.Extent), () => ParserStrings.DslBodyEmpty);
-                    return null;
-                }
-            }
-
-
-            if (isError)
-            {
-                return new ErrorStatementAst(ExtentOf(startExtent, endErrorStatement), dslToken);
-            }
-
-            #region "Add DSL Keywords"
-
-            var scAst = dslName as StringConstantExpressionAst;
-            if (scAst != null)
-            {
-                var topDslKeyword = new DynamicKeyword
-                {
-                    BodyMode = DynamicKeywordBodyMode.ScriptBlock,
-                    ImplementingModule = _keywordModuleName,
-                    Keyword = scAst.Value,
-                    NameMode = DynamicKeywordNameMode.NoName,
-                };
-
-                var sbeAst = dslBodyScriptBlock as ScriptBlockExpressionAst;
-                if (sbeAst != null)
-                {
-                    // Process all the statements in the scriptblock expression for
-                    // defining the schema
-                    foreach (var dslDefinitionBlockStatement in sbeAst.ScriptBlock.ProcessBlock.Statements)
-                    {
-                    }
-                }
-
-                DynamicKeyword.AddKeyword(topDslKeyword);
-            }
-
-            #endregion
-
-            // End DSL Dynamic Keyword Addition
-            // ################################################################################
-            // ################################################################################
-
-            var restorePoint = _tokenizer.GetRestorePoint();
-            Resync(restorePoint);
-
-            ReportError(dslToken.Extent, () => "DslToken parsed");
             return null;
         }
 
-        private Dictionary<string, DynamicKeyword> _configurationKeywordsDefinedInThisFile;
+        /// <summary>
+        /// Parses a keword definition statement inside a DSL definition block and
+        /// adds that keyword to the enclosing context/scope.
+        /// </summary>
+        /// <param name="enclosingKeyword">the enclosing scope, controlled by the keyword used</param>
+        /// <param name="keywordToken">the keyword statement as a token</param>
+        /// <returns>a statement AST node denoting a parsed keyword definition</returns>
+        private StatementAst DslKeywordRule(DynamicKeyword enclosingKeyword, Token keywordToken)
+        {
+            // TODO: Parse keyword name
+
+            // TODO: Add keyword to DynamicKeyword context
+
+            // TODO: Parse parameters ?
+
+            // TODO: Parse internal statements
+
+                // TODO: Parse keywords within this one
+                // TODO: Parse attributes within this one
+
+            // TODO: Ensure parsed statements are attached to given keyword
+
+            // TODO: Return correct Keyword AST element
+
+            return null;
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        /// <param name="enclosingKeyword"></param>
+        /// <param name="attrToken"></param>
+        /// <returns></returns>
+        private StatementAst DslAttributeRule(DynamicKeyword enclosingKeyword, Token attrToken)
+        {
+            return null;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="enclosingKeyword"></param>
+        /// <param name="paramToken"></param>
+        /// <returns></returns>
+        private StatementAst DslParameterRule(DynamicKeyword enclosingKeyword, Token paramToken)
+        {
+            return null;
+        }
 
         /// <summary>
         /// Reads an argument expression for a keyword or keyword parameter.

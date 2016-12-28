@@ -380,6 +380,7 @@ namespace System.Management.Automation.Language
         private static Dictionary<String, List<String>> s_excludeKeywords = new Dictionary<String, List<String>>(StringComparer.OrdinalIgnoreCase)
         {
             {@"Node", new List<String> {@"Node"}},
+            {@"Keyword", new List<String> {@"Keyword"}},
         };
 
         /// <summary>
@@ -539,7 +540,7 @@ namespace System.Management.Automation.Language
         /*A*/    "configuration",           "public",           "private",          "static",                     /*A*/
         /*B*/    "interface",               "enum",             "namespace",        "module",                     /*B*/
         /*C*/    "type",                    "assembly",         "command",          "hidden",                     /*C*/
-        /*D*/    "base",                    "dsl",              "keyword",                                        /*D*/
+        /*D*/    "base",                    "dsl",                                                                /*D*/
         };
 
         private static readonly TokenKind[] s_keywordTokenKind = new TokenKind[] {
@@ -555,7 +556,7 @@ namespace System.Management.Automation.Language
         /*A*/    TokenKind.Configuration,   TokenKind.Public,   TokenKind.Private,  TokenKind.Static,             /*A*/
         /*B*/    TokenKind.Interface,       TokenKind.Enum,     TokenKind.Namespace,TokenKind.Module,             /*B*/
         /*C*/    TokenKind.Type,            TokenKind.Assembly, TokenKind.Command,  TokenKind.Hidden,             /*C*/
-        /*D*/    TokenKind.Base,            TokenKind.Dsl,      TokenKind.Keyword                                 /*D*/
+        /*D*/    TokenKind.Base,            TokenKind.Dsl,                                                        /*D*/
         };
 
         internal static readonly string[] _operatorText = new string[] {

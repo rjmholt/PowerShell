@@ -105,6 +105,12 @@ The `Start-PSBuild` script will output the location of the executable:
 
 You should now be running the `powershell` that you just built, if your run the above executable.
 You can run our cross-platform Pester tests with `Start-PSPester`, and our xUnit tests with `Start-PSxUnit`.
+For example:
+
+```powershell
+Import-Module ./build.psm1
+Start-PSPester
+```
 
 Build manually
 ==============

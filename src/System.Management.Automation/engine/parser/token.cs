@@ -573,9 +573,6 @@ namespace System.Management.Automation.Language
         /// <summary>The 'dsl' keyword</summary>
         Dsl = 169,
 
-        /// <summary>The 'keyword' keyword</summary>
-        Keyword = 170
-
         #endregion Keywords
     }
 
@@ -928,7 +925,6 @@ namespace System.Management.Automation.Language
             /*               Hidden */ TokenFlags.Keyword,
             /*                 Base */ TokenFlags.Keyword,
             /*                  DSL */ TokenFlags.Keyword,
-            /*              Keyword */ TokenFlags.Keyword,
 
             #endregion Flags for keywords
         };
@@ -1128,7 +1124,6 @@ namespace System.Management.Automation.Language
             /*               Hidden */ "hidden",
             /*                 Base */ "base",
             /*                  DSL */ "dsl",
-            /*              Keyword */ "keyword",
 
             #endregion Text for keywords
         };
