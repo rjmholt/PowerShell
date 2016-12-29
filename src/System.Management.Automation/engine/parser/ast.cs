@@ -2507,7 +2507,7 @@ namespace System.Management.Automation.Language
 
     /// <summary>
     /// The ast representing a type definition including attributes, base class and
-    /// implemented interfaces, plus it's members.
+    /// implemented interfaces, plus its members.
     /// </summary>
     public class TypeDefinitionAst : StatementAst
     {
@@ -7252,6 +7252,88 @@ namespace System.Management.Automation.Language
         }
 
         #endregion
+    }
+
+    public class DslDefinitionStatementAst : StatementAst
+    {
+        // Static empty collections to point to for empty ASTs
+        private static readonly ReadOnlyCollection<DslKeywordAst> s_emptyKeywordList =
+            Utils.EmptyReadOnlyCollection<DslKeywordAst>();
+
+        public DslDefinitionStatementAst(IScriptExtent extent, string name, IEnumerable<DslKeywordAst> keywords) : base(extent)
+        {
+            this.Name = name;
+
+            if (keywords != null && keywords.Any())
+            {
+                Keywords = new ReadOnlyCollection<DslKeywordAst>(keywords.ToArray());
+            }
+            else
+            {
+                Keywords = s_emptyKeywordList;
+            }
+        }
+
+        /// <summary>
+        /// The name of the DSL
+        /// </summary>
+        public string Name { get; private set; }
+
+        /// <summary>
+        /// The ASTs for keyword definitions within the DSL
+        /// </summary>
+        public ReadOnlyCollection<DslKeywordAst> Keywords { get; private set; }
+
+        /// <summary>
+        /// Copy the DslDefinitionStatementAst
+        /// </summary>
+        /// <returns></returns>
+        public override Ast Copy()
+        {
+            return new DslDefinitionStatementAst(Extent, Name, CopyElements(Keywords));
+        }
+
+        internal override object Accept(ICustomAstVisitor visitor)
+        {
+            throw new NotImplementedException();
+        }
+
+        internal override IEnumerable<PSTypeName> GetInferredType(CompletionContext context)
+        {
+            throw new NotImplementedException();
+        }
+
+        internal override AstVisitAction InternalVisit(AstVisitor visitor)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class DslKeywordAst : StatementAst
+    {
+        public DslKeywordAst(IScriptExtent extent) : base(extent)
+        {
+        }
+
+        public override Ast Copy()
+        {
+            throw new NotImplementedException();
+        }
+
+        internal override object Accept(ICustomAstVisitor visitor)
+        {
+            throw new NotImplementedException();
+        }
+
+        internal override IEnumerable<PSTypeName> GetInferredType(CompletionContext context)
+        {
+            throw new NotImplementedException();
+        }
+
+        internal override AstVisitAction InternalVisit(AstVisitor visitor)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     #endregion Statements

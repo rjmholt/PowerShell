@@ -1928,6 +1928,7 @@ namespace System.Management.Automation.Language
                 case TokenKind.From:
                 case TokenKind.Define:
                 case TokenKind.Var:
+                case TokenKind.Keyword:
                     ReportError(token.Extent, () => ParserStrings.ReservedKeywordNotAllowed, token.Kind.Text());
                     statement = new ErrorStatementAst(token.Extent);
                     break;
@@ -3052,7 +3053,7 @@ namespace System.Management.Automation.Language
             //G    keyword-definition
             //G    property-definition
 
-            // TODO: Parse the DSL name
+            // Parse the DSL name
             SkipNewlines();
 
             // Check name is given
@@ -3086,11 +3087,15 @@ namespace System.Management.Automation.Language
 
             // Collect keyword definitions
             IScriptExtent lastExtent = lCurly.Extent;
+            Token nextToken;
             StatementAst currKeywordStmt;
             List<StatementAst> keywordStmts = new List<StatementAst>();
 
-            while ((currKeywordStmt = DslKeywordRule(dslKeyword)) != null)
+            while ((nextToken = NextToken()).Kind == TokenKind.Keyword)
             {
+                SkipToken();
+                SkipNewlines();
+                currKeywordStmt = DslKeywordRule(dslKeyword);
                 keywordStmts.Add(currKeywordStmt);
                 lastExtent = currKeywordStmt.Extent;
             }
@@ -3110,7 +3115,8 @@ namespace System.Management.Automation.Language
 
             // TODO: Return the parsed DSL AST node
                 // TODO: Define an AST type for DSL blocks
-                // TODO: Figure out "custom attributes" and "nested ASTs"
+                // TODO: Figure out "custom attributes"
+                // TODO: Sort through errors with nested ASTs and assign appropriate data structures
                 // TODO: Load an instance of this AST type with the elements so far and return it
 
             ReportError(After(dslToken), () => "DSL block parsed");
@@ -3131,6 +3137,10 @@ namespace System.Management.Automation.Language
             //G    'keyword' single-name-expression [params] dsl-define-block
 
             // TODO: Parse keyword name
+            SkipNewlines();
+
+            var nextToken = NextToken();
+
             // TODO: Add keyword to DynamicKeyword context
 
             // TODO: Parse parameters ?
