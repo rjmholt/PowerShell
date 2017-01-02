@@ -50,7 +50,7 @@ namespace System.Management.Automation.Language
     public enum DynamicKeywordBodyMode
     {
         /// <summary>
-        /// The keyword act like a command
+        /// The keyword acts like a command
         /// </summary>
         Command = 0,
         /// <summary>
@@ -72,7 +72,7 @@ namespace System.Management.Automation.Language
         #region static properties/functions
 
         /// <summary>
-        /// Defines a dictionary of dynamic keywords, stored in thread-local storage.
+        /// Global lookup table of defined DynamicKeywords, stored in thread-local storage.
         /// </summary>
         private static Dictionary<string, DynamicKeyword> DynamicKeywords
         {
@@ -87,7 +87,8 @@ namespace System.Management.Automation.Language
         private static Dictionary<string, DynamicKeyword> t_dynamicKeywords;
 
         /// <summary>
-        /// stack of DynamicKeywords Cache
+        /// DynamicKeyword caches kept in a stack, to pop and push as scope increases
+        /// and decreases
         /// </summary>
         ///
         private static Stack<Dictionary<string, DynamicKeyword>> DynamicKeywordsStack
@@ -119,7 +120,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// Pop up previous  dynamicKeywords cache
+        /// Pop up previous dynamicKeywords cache
         /// </summary>
         public static void Pop()
         {
@@ -127,7 +128,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Fetch the DynamicKeyword given by name
         /// </summary>
         /// <param name="name"></param>
         /// <returns></returns>
@@ -139,7 +140,8 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// Returns a copied list of all of the existing dynamic keyword definitions.
+        /// Returns a copied list of all of the existing dynamic keyword definitions
+        /// in the current stack scope
         /// </summary>
         /// <returns></returns>
         public static List<DynamicKeyword> GetKeyword()
@@ -148,7 +150,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Check if the name given is associated with a defined keyword
         /// </summary>
         /// <param name="name"></param>
         /// <returns></returns>
@@ -164,7 +166,8 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Add the given keyword to the store of defined keywords in the current cache.
+        /// If a keyword with that name already exists, it is replaced with the given one.
         /// </summary>
         /// <param name="keywordToAdd"></param>
         public static void AddKeyword(DynamicKeyword keywordToAdd)
@@ -281,7 +284,8 @@ namespace System.Management.Automation.Language
         public string ResourceName { get; set; }
 
         /// <summary>
-        /// Set to true if we should be looking for a scriptblock instead of a hashtable
+        /// Specifies the syntax of the keyword body. Options are `Scriptblock`, `Hashtable` and
+        /// `Command`, which means there is no body
         /// </summary>
         public DynamicKeywordBodyMode BodyMode { get; set; }
 
