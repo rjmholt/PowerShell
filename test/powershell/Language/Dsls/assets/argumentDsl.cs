@@ -1,6 +1,6 @@
 using System.Management.Automation;
 
-namespace Tests.Mock.PowerShell.Dsl
+namespace Tests.PowerShell.Dsl
 {
     [PSDsl]
     public class ArgumentDsl

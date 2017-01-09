@@ -1,4 +1,4 @@
-function Compile-Dsl
+function CompileDsl
 {
     param([string] $DslSourcePath, [string] $DllOutputPath)
 
