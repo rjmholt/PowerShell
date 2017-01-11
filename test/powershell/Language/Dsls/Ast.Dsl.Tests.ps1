@@ -102,7 +102,7 @@ $dslName
     It "has the DSL keyword as the top AST node" {
         # TODO: Check assumption that direct parent of DynamicKeywordStatementAst is ScriptBlockAst
         $topKw = $ast.Find({
-            Test-DKwStmtAst $args[0] -and
+            $args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst] -and
             $args[0].Keyword.Keyword -eq $dslName -and
             $args[0].Parent -is [System.Management.Automation.Language.ScriptBlockAst]
         }, $true)
