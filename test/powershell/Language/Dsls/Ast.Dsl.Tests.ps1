@@ -27,10 +27,10 @@ Describe "Basic DSL syntax loading into AST" -Tags "CI" {
         $dslName = "BasicDsl"
         $keywordName = "BasicKeyword"
 
-        New-TestDllModule -TestDrive $TESTDRIVE -ModuleName $dslName
+        New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
 
         $envModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-SystemPathString -TestDrive $TESTDRIVE
+        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
 
         $psBody = @"
 using module $dslName
@@ -61,10 +61,10 @@ Describe "More complex nested keyword structure loading into AST" -Tags "CI" {
     BeforeAll {
         $dslName = "NestedDsl"
 
-        New-TestDllModule -TestDrive $TESTDRIVE -ModuleName $dslName
+        New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
 
         $envModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-SystemPathString -TestDrive $TESTDRIVE
+        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
 
         $ast = [scriptblock]::Create(@"
 $dslName

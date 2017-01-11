@@ -3,12 +3,12 @@ using System.Management.Automation;
 namespace Tests.PowerShell.Dsl
 {
     [PSDsl]
-    public class MixedSyntaxDsl
+    public class MixedSyntaxModeDsl
     {
-        [PSKeyword(Name = PSKeywordNameMode.Required)]
-        public class MixedSyntaxNameRequiredKeyword : IPSKeyword
+        [PSKeyword(Name = PSKeywordNameMode.Optional)]
+        public class MixedSyntaxModeNameOptionalKeyword : IPSKeyword
         {
-            public MixedSyntaxNameRequiredKeyword()
+            public MixedSyntaxModeNameOptionalKeyword()
             {
                 PreParse = null;
                 PostParse = null;
@@ -31,10 +31,10 @@ namespace Tests.PowerShell.Dsl
             }
         }
 
-        [PSKeyword(Body = PSKeywordBodyMode.Hashtable]
-        public class MixedSyntaxBodyHashtableKeyword : IPSKeyword
+        [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock]
+        public class MixedSyntaxModeBodyScriptBlockKeyword : IPSKeyword
         {
-            public MixedSyntaxBodyHashtableKeyword()
+            public MixedSyntaxModeBodyScriptBlockKeyword()
             {
                 PreParse = null;
                 PostParse = null;
@@ -58,9 +58,9 @@ namespace Tests.PowerShell.Dsl
         }
 
         [PSKeyword(Use = PSKeywordUseMode.RequiredMany)]
-        public class MixedSyntaxUseRequiredManyKeyword : IPSKeyword
+        public class MixedSyntaxModeUseRequiredManyKeyword : IPSKeyword
         {
-            public MixedSyntaxUseRequiredManyKeyword()
+            public MixedSyntaxModeUseRequiredManyKeyword()
             {
                 PreParse = null;
                 PostParse = null;
@@ -83,10 +83,10 @@ namespace Tests.PowerShell.Dsl
             }
         }
 
-        [PSKeyword(Name = PSKeywordNameMode.Optional, Body = PSKeywordBodyMode.ScriptBlock, Use = PSKeywordUseMode.OptionalMany)]
-        public class MixedSyntaxAllOptionsKeyword : IPSKeyword
+        [PSKeyword(Name = PSKeywordNameMode.Optional, Body = PSKeywordBodyMode.Hashtable, Use = PSKeywordUseMode.OptionalMany)]
+        public class MixedSyntaxModeAllOptionsKeyword : IPSKeyword
         {
-            public MixedSyntaxAllOptionsKeyword()
+            public MixedSyntaxModeAllOptionsKeyword()
             {
                 PreParse = null;
                 PostParse = null;
