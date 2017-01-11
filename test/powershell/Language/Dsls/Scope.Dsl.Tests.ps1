@@ -1,4 +1,8 @@
-Describe "DynamicKeyword scoping rules" -Tags "Feature" {
+<#
+Tests scoping in DynamicKeyword contexts
+#>
+
+Describe "DynamicKeyword scoping rules" -Tags "CI" {
     Context "has nested keywords" {
         It "does not resolve inner keyword in outer scope" {
 

@@ -1,4 +1,4 @@
-using System.Management.Automation // ?
+using System.Management.Automation.Language;
 
 namespace Tests.PowerShell.Dsl
 {
@@ -8,24 +8,25 @@ namespace Tests.PowerShell.Dsl
         [PSKeyword]
         public class BasicKeyword : IPSKeyword
         {
-            SyntaxKeyword()
+            public BasicKeyword()
             {
-                PreParseAction = null;
-                PostParseAction = null;
+                PreParse = null;
+                // Minimal type-compliant PostParse
+                PostParse = (dynamicKeywordStatementAst) => null;
                 SemanticCheck = null;
             }
 
-            Func<DynamicKeyword, ParseError[]> PreParse
+            public override Func<DynamicKeyword, ParseError[]> PreParse
             {
                 get;
             }
 
-            Func<DynamicKeywordStatementAst, ParseError[]> PostParse
+            public override Func<DynamicKeywordStatementAst, ParseError[]> PostParse
             {
                 get;
             }
 
-            Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
+            public override Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
             {
                 get;
             }

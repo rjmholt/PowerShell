@@ -1,9 +1,13 @@
-Describe "Parsing of DSL semantic features" -Tags "Feature" {
+<#
+Tests functionality of semantic features in DynamicKeywords
+#>
+
+Describe "Parsing of DSL semantic features" -Tags "CI" {
     It "rejects DSL that does not implement IPSKeyword" {
 
     }
 
-    It "adds PreParse actions to AST" {
+    It "executes implemented PreParse actions" {
 
     }
 
@@ -20,7 +24,7 @@ Describe "Parsing of DSL semantic features" -Tags "Feature" {
     }
 }
 
-Describe "Execution of semantic action" -Tags "Feature" {
+Describe "Execution of semantic action" -Tags "CI" {
     Context "Executing pre-parse actions" {
         It "does nothing for null PreParse" {
 

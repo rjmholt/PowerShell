@@ -15,17 +15,17 @@ namespace Tests.PowerShell.Dsl
                 SemanticCheck = null;
             }
 
-            Func<DynamicKeyword, ParseError[]> PreParse
+            public override Func<DynamicKeyword, ParseError[]> PreParse
             {
                 get;
             }
 
-            Func<DynamicKeywordStatementAst, ParseError[]> PostParse
+            public override Func<DynamicKeywordStatementAst, ParseError[]> PostParse
             {
                 get;
             }
 
-            Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
+            public override Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
             {
                 get;
             }
@@ -41,17 +41,17 @@ namespace Tests.PowerShell.Dsl
                 SemanticCheck = null;
             }
 
-            Func<DynamicKeyword, ParseError[]> PreParse
+            public override Func<DynamicKeyword, ParseError[]> PreParse
             {
                 get;
             }
 
-            Func<DynamicKeywordStatementAst, ParseError[]> PostParse
+            public override Func<DynamicKeywordStatementAst, ParseError[]> PostParse
             {
                 get;
             }
 
-            Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
+            public override Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
             {
                 get;
             }
@@ -67,17 +67,17 @@ namespace Tests.PowerShell.Dsl
                 SemanticCheck = null;
             }
 
-            Func<DynamicKeyword, ParseError[]> PreParse
+            public override Func<DynamicKeyword, ParseError[]> PreParse
             {
                 get;
             }
 
-            Func<DynamicKeywordStatementAst, ParseError[]> PostParse
+            public override Func<DynamicKeywordStatementAst, ParseError[]> PostParse
             {
                 get;
             }
 
-            Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
+            public override Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
             {
                 get;
             }
@@ -93,17 +93,17 @@ namespace Tests.PowerShell.Dsl
                 SemanticCheck = null;
             }
 
-            Func<DynamicKeyword, ParseError[]> PreParse
+            public override Func<DynamicKeyword, ParseError[]> PreParse
             {
                 get;
             }
 
-            Func<DynamicKeywordStatementAst, ParseError[]> PostParse
+            public override Func<DynamicKeywordStatementAst, ParseError[]> PostParse
             {
                 get;
             }
 
-            Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
+            public override Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
             {
                 get;
             }

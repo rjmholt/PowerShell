@@ -1,26 +1,10 @@
-Describe "DSL keyword attribute parameter parsing" -Tags "Feature" {
-    BeforeAll {
+<#
+Tests usage of keyword syntax mode specifications
+#>
 
-    }
+using module .\DslTestSupport.psm1
 
-    AfterAll {
-
-    }
-
-    It "parses the keyword name mode as Required" {
-
-    }
-
-    It "parses the keyword body mode as Hashtable" {
-
-    }
-
-    It "parses the keyword use mode as OptionalMany" {
-
-    }
-}
-
-Describe "DSL keyword name mode attributes" -Tags "Feature" {
+Describe "DSL keyword name mode attributes" -Tags "CI" {
     BeforeAll {
 
     }
@@ -58,7 +42,7 @@ Describe "DSL keyword name mode attributes" -Tags "Feature" {
     }
 }
 
-Describe "DSL keyword body mode attributes" -Tags "Feature" {
+Describe "DSL keyword body mode attributes" -Tags "CI" {
     BeforeAll {
 
     }
@@ -102,7 +86,7 @@ Describe "DSL keyword body mode attributes" -Tags "Feature" {
     }
 }
 
-Describe "DSL keyword use mode attributes" -Tags "Feature" {
+Describe "DSL keyword use mode attributes" -Tags "CI" {
     BeforeAll {
 
     }
@@ -166,4 +150,8 @@ Describe "DSL keyword use mode attributes" -Tags "Feature" {
 
         }
     }
+}
+
+Describe "Mixed use SyntaxMode semantics" {
+
 }
