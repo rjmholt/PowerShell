@@ -15,11 +15,7 @@ Describe "Basic DSL addition to runtime namespace" -Tags "CI" {
         New-TestDllModule -TestDrive $TESTDRIVE -ModuleName $dslName
 
         $testContext = [powershell]::Create()
-        $testContext.AddScript(@"
-using module $dslName
-
-[System.Management.Automation.Language.DynamicKeyword]::GetKeyword($dslName)
-"@).Invoke()
+        $testContext.AddScript("using module $dslName").Invoke()
     }
 
     AfterAll {
@@ -27,6 +23,7 @@ using module $dslName
     }
 
     It "imports the top level DSL keyword into the DynamicKeyword namespace" {
+        $topLevelDslKeyword = $testContext.AddScript("[System.Management.Automation.Language.DynamicKeyword]::GetKeyword($dslName)").Invoke()
         $topLevelDslKeyword.Keyword | Should Be $dslName
     }
 
@@ -35,12 +32,7 @@ using module $dslName
     }
 
     It "does not have the inner keyword available at the top level" {
-        $testContext = [powershell]::Create()
-        $testContext.AddScript(@"
-using module $dslName
-
-[System.Management.Automation.Language.DynamicKeyword]::GetKeyword($keywordName)
-"@).Invoke() | Should Be $null
+        $testContext.AddScript("[System.Management.Automation.Language.DynamicKeyword]::GetKeyword($keywordName)").Invoke() | Should Be $null
     }
 }
 

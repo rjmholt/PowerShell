@@ -5,7 +5,7 @@ namespace Tests.PowerShell.Dsl
     [PSDsl]
     public class BasicDsl
     {
-        [PSKeyword]
+        [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock)]
         public class BasicKeyword : IPSKeyword
         {
             public BasicKeyword()
@@ -16,17 +16,17 @@ namespace Tests.PowerShell.Dsl
                 SemanticCheck = null;
             }
 
-            public override Func<DynamicKeyword, ParseError[]> PreParse
+            public Func<DynamicKeyword, ParseError[]> PreParse
             {
                 get;
             }
 
-            public override Func<DynamicKeywordStatementAst, ParseError[]> PostParse
+            public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
             {
                 get;
             }
 
-            public override Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
+            public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
             {
                 get;
             }

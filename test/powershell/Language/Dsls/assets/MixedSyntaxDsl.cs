@@ -3,107 +3,107 @@ using System.Management.Automation;
 namespace Tests.PowerShell.Dsl
 {
     [PSDsl]
-    public class SyntaxDsl
+    public class MixedSyntaxDsl
     {
         [PSKeyword(Name = PSKeywordNameMode.Required)]
-        public class SyntaxNameRequiredKeyword : IPSKeyword
+        public class MixedSyntaxNameRequiredKeyword : IPSKeyword
         {
-            public SyntaxNameRequiredKeyword()
+            public MixedSyntaxNameRequiredKeyword()
             {
                 PreParse = null;
                 PostParse = null;
                 SemanticCheck = null;
             }
 
-            public override Func<DynamicKeyword, ParseError[]> PreParse
+            public Func<DynamicKeyword, ParseError[]> PreParse
             {
                 get;
             }
 
-            public override Func<DynamicKeywordStatementAst, ParseError[]> PostParse
+            public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
             {
                 get;
             }
 
-            public override Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
+            public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
             {
                 get;
             }
         }
 
         [PSKeyword(Body = PSKeywordBodyMode.Hashtable]
-        public class SyntaxBodyHashtableKeyword : IPSKeyword
+        public class MixedSyntaxBodyHashtableKeyword : IPSKeyword
         {
-            public SyntaxBodyHashtableKeyword()
+            public MixedSyntaxBodyHashtableKeyword()
             {
                 PreParse = null;
                 PostParse = null;
                 SemanticCheck = null;
             }
 
-            public override Func<DynamicKeyword, ParseError[]> PreParse
+            public Func<DynamicKeyword, ParseError[]> PreParse
             {
                 get;
             }
 
-            public override Func<DynamicKeywordStatementAst, ParseError[]> PostParse
+            public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
             {
                 get;
             }
 
-            public override Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
+            public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
             {
                 get;
             }
         }
 
         [PSKeyword(Use = PSKeywordUseMode.RequiredMany)]
-        public class SyntaxUseRequiredManyKeyword : IPSKeyword
+        public class MixedSyntaxUseRequiredManyKeyword : IPSKeyword
         {
-            public SyntaxUseRequiredManyKeyword()
+            public MixedSyntaxUseRequiredManyKeyword()
             {
                 PreParse = null;
                 PostParse = null;
                 SemanticCheck = null;
             }
 
-            public override Func<DynamicKeyword, ParseError[]> PreParse
+            public Func<DynamicKeyword, ParseError[]> PreParse
             {
                 get;
             }
 
-            public override Func<DynamicKeywordStatementAst, ParseError[]> PostParse
+            public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
             {
                 get;
             }
 
-            public override Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
+            public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
             {
                 get;
             }
         }
 
         [PSKeyword(Name = PSKeywordNameMode.Optional, Body = PSKeywordBodyMode.ScriptBlock, Use = PSKeywordUseMode.OptionalMany)]
-        public class SyntaxAllOptionsKeyword : IPSKeyword
+        public class MixedSyntaxAllOptionsKeyword : IPSKeyword
         {
-            public SyntaxAllOptionsKeyword()
+            public MixedSyntaxAllOptionsKeyword()
             {
                 PreParse = null;
                 PostParse = null;
                 SemanticCheck = null;
             }
 
-            public override Func<DynamicKeyword, ParseError[]> PreParse
+            public Func<DynamicKeyword, ParseError[]> PreParse
             {
                 get;
             }
 
-            public override Func<DynamicKeywordStatementAst, ParseError[]> PostParse
+            public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
             {
                 get;
             }
 
-            public override Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
+            public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
             {
                 get;
             }
