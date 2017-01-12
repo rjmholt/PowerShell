@@ -6,15 +6,22 @@ using module .\DslTestSupport.psm1
 
 Describe "DSL keyword name mode attributes" -Tags "CI" {
     BeforeAll {
+        $envModulePath = $env:PSModulePath
+        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
 
+        $dslName = "NameSyntaxModeDsl"
+        $keywordName = "NameSyntaxModeKeyword"
+
+        New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
     }
 
     AfterAll {
-
+        $env:PSModulePath = $envModulePath
     }
 
     Context "NameMode is NoName" {
         It "succeeds when no name given" {
+
         }
 
         It "fails when name is given" {

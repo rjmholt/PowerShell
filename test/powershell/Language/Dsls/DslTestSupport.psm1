@@ -32,3 +32,24 @@ function Get-SystemPathString
 
     [System.IO.Path]::PathSeparator + $TestDrive + [System.IO.Path]::DirectorySeparatorChar
 }
+
+function New-ModuleTestContext
+{
+    param([string] $TestDrive, [string] $ModuleName, [ref] $EnvTempVar)
+
+    $EnvTempVar = $env:PSModulePath
+    $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
+
+    New-TestDllModule -TestDrive $TestDrive -ModuleName $ModuleName
+
+    $context = [powershell]::Create()
+    $context.AddScript("using module $ModuleName").Invoke()
+    $context
+}
+
+function Remove-ModuleTestContext
+{
+    param([string] $EnvTempVar)
+
+    $env:PSModulePath = $EnvTempVar
+}

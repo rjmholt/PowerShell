@@ -25,16 +25,19 @@ namespace Tests.PowerShell.Dsl
                 SemanticCheck = null;
             }
 
-            [PSKeywordParameter]
-            KeywordParameterType keywordCustomPositionalParameter;
+            /*
+            TODO: Figure out how (if?) positional parameters should be done...
 
             [PSKeywordParameter]
             int keywordIntPositionalParameter;
 
             [PSKeywordParameter]
             string keywordStringPositionalParameter;
+            */
 
-            [PSKeywordParameter(ParameterName = "NamedParameter")]
+            [PSKeywordParameter]
+            KeywordParameterType keywordCustomTypeParameter;
+
             string keywordStringNamedParameter;
 
             public Func<DynamicKeyword, ParseError[]> PreParse
