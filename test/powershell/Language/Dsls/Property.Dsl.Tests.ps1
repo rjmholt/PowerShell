@@ -21,7 +21,7 @@ Describe "DSL keyword parameter handling" -Tags "CI" {
     }
 
     It "employs a positional keyword parameter" -Pending {
-
+        # TODO: Work out how positional parameters would be declared
     }
 
     It "employs a named keyword parameter" {

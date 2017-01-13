@@ -1,12 +1,12 @@
 using System.Management.Automation.Language;
 
 [PSDsl]
-class UseSyntaxModeDsl
+class NoNameModeDsl
 {
-    [PSKeyword(Use = PSKeywordUseMode.OptionalMany)]
-    class UseSyntaxModeKeyword : IPSKeyword
+    [PSKeyword(Name = PSKeywordNameMode.NoName)
+    class NoNameModeKeyword : IPSKeyword
     {
-        public UseSyntaxModeKeywordName()
+        public NoNameModeKeyword()
         {
             PreParse = null;
             PostParse = (dynamicKeywordStatementAst) => null;

@@ -4,161 +4,90 @@ Tests usage of keyword syntax mode specifications
 
 using module .\DslTestSupport.psm1
 
-Describe "DSL keyword name mode attributes" -Tags "CI" {
+Describe "DSL keyword Name/Body mode functionality" -Tags "CI" {
+    $testCases = @(
+        @{ attr = "Name"; value = "NoName"; success = "succeeds"; body = "{0}Dsl {{ {0}Keyword }}"; condition = 'no name' }
+        @{ attr = "Name"; value = "NoName"; success = "fails"; body = "{0}Dsl {{ {0}Keyword -Name 'Foo' }}"; condition = 'name' }
+        @{ attr = "Name"; value = "Required"; success = "succeeds"; body = "{0}Dsl {{ {0}Keyword -Name 'Foo' }}"; condition = "name" }
+        @{ attr = "Name"; value = "Required"; success = "fails"; body = "{0}Dsl {{ {0}Keyword }}"; condition = "no name" }
+        @{ attr = "Name"; value = "Optional"; success = "succeeds"; body = "{0}Dsl {{ {0}Keyword }}"; condition = "no name" }
+        @{ attr = "Name"; value = "Optional"; success = "succeeds"; body = "{0}Dsl {{ {0}Keyword -Name 'Foo' }}"; condition = "name"}
+
+        @{ attr = "Body"; value = "Command"; success = "succeeds"; body = "{0}Dsl {{ {0}Keyword }}"; condition = "no body" }
+        @{ attr = "Body"; value = "Command"; success = "fails"; body = "{0}Dsl {{ {0}Keyword {{  }} }}"; condition = "ScriptBlock body" }
+        @{ attr = "Body"; value = "ScriptBlock"; success = "succeeds"; body = "{0}Dsl {{ {0}Keyword {{ }} }}"; condition = "ScriptBlock body" }
+        @{ attr = "Body"; value = "ScriptBlock"; success = "fails"; body = "{0}Dsl {{ {0}Keyword }}"; condition = "no body" }
+        @{ attr = "Body"; value = "ScriptBlock"; success = "fails"; body = "{0}Dsl {{ {0}Keyword {{ x = 5 }} }}"; condition = "Hashtable body" }
+        @{ attr = "Body"; value = "Hashtable"; success = "succeeds"; body = "{0}Dsl {{ {0}Keyword {{ x = 5 }} }}"; condition = "Hashtable body" }
+        @{ attr = "Body"; value = "Hashtable"; success = "fails"; body = "{0}Dsl {{ {0}Keyword }}"; condition = "no body" }
+        @{ attr = "Body"; value = "Hashtable"; success = "fails"; body = "{0}Dsl {{ {0}Keyword {{ }} }}"; condition = "ScriptBlock body" }
+
+        @{ attr = "Use"; value = "Required"; success = "succeeds"; body = "{0}Dsl {{ {0}Keyword }}"; condition = "single keyword use" }
+        @{ attr = "Use"; value = "Required"; success = "fails"; body = "{0}Dsl {{ }}"; condition = "no keyword use" }
+        @{ attr = "Use"; value = "Required"; success = "fails"; body = "{0}Dsl {{ {0}Keyword; {0}Keyword }}"; condition = "double keyword use" }
+        @{ attr = "Use"; value = "Optional"; success = "succeeds"; body = "{0}Dsl {{ }}"; condition = "no keyword use" }
+        @{ attr = "Use"; value = "Optional"; success = "succeeds"; body = "{0}Dsl {{ {0}Keyword }}"; condition = "single keyword use" }
+        @{ attr = "Use"; value = "Optional"; success = "fails"; body = "{0}Dsl {{ {0}Keyword; {0}Keyword }}"; condition = "double keyword use" }
+        @{ attr = "Use"; value = "RequiredMany"; success = "succeeds"; body = "{0}Dsl {{ {0}Keyword }}"; condition = "single keyword use" }
+        @{ attr = "Use"; value = "RequiredMany"; success = "succeeds"; body = "{0}Dsl {{ {0}Keyword; {0}Keyword }}"; condition = "double keyword use" }
+        @{ attr = "Use"; value = "RequiredMany"; success = "fails"; body = "{0}Dsl {{ }}"; condition = "no keyword use" }
+        @{ attr = "Use"; value = "OptionalMany"; success = "succeeds"; body = "{0}Dsl {{ }}"; condition = "no keyword use" }
+        @{ attr = "Use"; value = "OptionalMany"; success = "succeeds"; body = "{0}Dsl {{ {0}Keyword }}"; condition = "single keyword use" }
+        @{ attr = "Use"; value = "OptionalMany"; success = "succeeds"; body = "{0}Dsl {{ {0}Keyword; {0}Keyword }}"; condition = "double keyword use" }
+    )
+
     BeforeAll {
         $envModulePath = $env:PSModulePath
         $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
-
-        $dslName = "NameSyntaxModeDsl"
-        $keywordName = "NameSyntaxModeKeyword"
-
-        New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
     }
 
     AfterAll {
         $env:PSModulePath = $envModulePath
     }
 
-    Context "NameMode is NoName" {
-        It "succeeds when no name given" {
-
-        }
-
-        It "fails when name is given" {
-        }
+    BeforeEach {
+        $context = [powershell]::Create()
+        $context.AddScript($body -f "$($attr)Mode").Invoke()
     }
 
-    Context "NameMode is Required" {
-        It "succeeds when a name is provided" {
-
-        }
-
-        It "fails when no name is provided" {
-        
-        }
+    AfterEach {
+        $context.Dispose()
     }
 
-    Context "NameMode is Optional" {
-        It "succeeds when a name is provided and uses that name" {
+    It "<attr>Mode <success> with <condition>" -TestCases $testCases {
+        param($attr, $value, $success, $body, $condition)
 
-        }
+        New-TestDllModule -TestDrive $TestDrive -ModuleName "$($attr)ModeDsl"
 
-        It "succeeds when no name is provided and uses the default" {
+        $errorExpected = ($success -ne "succeeds")
 
-        }
-    }
-}
-
-Describe "DSL keyword body mode attributes" -Tags "CI" {
-    BeforeAll {
-
-    }
-
-    AfterAll {
-
-    }
-
-    Context "BodyMode is Command" {
-        It "succeeds when keyword is used alone" {
-
-        }
-
-        It "fails when an argument is given to the keyword" {
-
-        }
-
-        It "parses the scriptblock as an argument, not the body" {
-
-        }
-    }
-
-    Context "BodyMode is ScriptBlock" {
-        It "successfully parses interior of scriptblock body" {
-
-        }
-
-        It "fails when no body is provided" {
-
-        }
-    }
-
-    Context "BodyMode is Hashtable" {
-        It "successfully parses interior of scriptblock body" {
-
-        }
-
-        It "fails when no body is provided" {
-
-        }
-    }
-}
-
-Describe "DSL keyword use mode attributes" -Tags "CI" {
-    BeforeAll {
-
-    }
-
-    AfterAll {
-
-    }
-
-    Context "UseMode is Required" {
-        It "has Required by default" {
-
-        }
-
-        It "fails to parse when keyword is not used" {
-
-        }
-
-        It "fails to parse when keyword is used more than once" {
-
-        }
-
-        It "parses when keyword is used exactly once" {
-
-        }
-    }
-
-    Context "UseMode is Optional" {
-        It "parses when keyword is not used" {
-
-        }
-
-        It "parses when keyword is used once" {
-
-        }
-
-        It "fails to parse when keyword is used multiple times" {
-
-        }
-    }
-
-    Context "UseMode is RequiredMany" {
-        It "parses when keyword is used once" {
-
-        }
-
-        It "parses when keyword is used many times" {
-
-        }
-
-        It "fails to parse when keyword is not used" {
-
-        }
-    }
-
-    Context "UseMode is OptionalMany" {
-        It "parses when keyword is not used" {
-
-        }
-
-        It "parses when keyword is used many times" {
-
-        }
+        $context.HadErrors | Should Be $errorExpected
     }
 }
 
 Describe "Mixed use SyntaxMode semantics" {
+    BeforeAll {
+        $envModulePath = $env:PSModulePath
+        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
 
+        $dslName = "AllSyntaxModesDsl"
+    }
+
+    AfterAll {
+        $env:PSModulePath = $envModulePath
+    }
+
+    BeforeEach {
+        $context = [powershell]::Create()
+        $context.AddScript("using module $dslName")
+    }
+
+    AfterEach {
+        $context.Dispose()
+    }
+
+    It "successfully parses all syntax modes in the same DSL" {
+        $context.AddScript("$dslName { AllSyntaxModesKeyword -Name 'Foo' {  }; AllSyntaxModesKeyword -Name 'Bar' { } }").Invoke()
+        $context.HadErrors | Should Be $false
+    }
 }

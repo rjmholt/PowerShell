@@ -1,12 +1,12 @@
 using System.Management.Automation.Language;
 
 [PSDsl]
-class NameSyntaxModeDsl
+class RequiredModeDsl
 {
-    [PSKeyword(Name = PSKeywordNameMode.Required)]
-    class NameSyntaxModeKeyword : IPSKeyword
+    [PSKeyword(Name = PSKeywordNameMode.Required)
+    class RequiredModeKeyword : IPSKeyword
     {
-        public NameSyntaxModeKeywordName()
+        public RequiredModeKeyword()
         {
             PreParse = null;
             PostParse = (dynamicKeywordStatementAst) => null;

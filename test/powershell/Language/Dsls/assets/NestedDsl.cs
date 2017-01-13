@@ -3,7 +3,7 @@ using System.Management.Automation.Language;
 [PSDsl]
 class NestedDsl
 {
-    [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock)]
+    [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock, Use = PSKeywordUseMode.Optional)]
     class NestedKeyword1 : IPSKeyword
     {
         public NestedKeyword1()
@@ -28,7 +28,7 @@ class NestedDsl
             get;
         }
 
-        [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock)]
+        [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock, Use = PSKeywordUseMode.Optional)]
         class NestedKeyword1_1 : IPSKeyword
         {
             public NestedKeyword1_1()
@@ -53,7 +53,7 @@ class NestedDsl
                 get;
             }
 
-            [PSKeyword]
+            [PSKeyword(Use = PSKeywordUseMode.Optional)]
             class NestedKeyword1_1_1 : IPSKeyword
             {
                 public NestedKeyword1_1_1()
@@ -80,7 +80,7 @@ class NestedDsl
             }
         }
 
-        [PSKeyword]
+        [PSKeyword(Use = PSKeywordUseMode.Optional)]
         class NestedKeyword1_2 : IPSKeyword
         {
             public NestedKeyword1_2()
@@ -107,7 +107,7 @@ class NestedDsl
         }
     }
 
-    [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock)]
+    [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock, Use = PSKeywordUseMode.Optional)]
     class NestedKeyword2 : IPSKeyword
     {
         public NestedKeyword2()
@@ -132,7 +132,7 @@ class NestedDsl
             get;
         }
 
-        [PSKeyword]
+        [PSKeyword(Use = PSKeywordUseMode.Optional)]
         class NestedKeyword2_1 : IPSKeyword
         {
             public NestedKeyword2_1()
@@ -158,7 +158,7 @@ class NestedDsl
             }
         }
 
-        [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock)]
+        [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock, Use = PSKeywordUse.Optional)]
         class NestedKeyword2_2 : IPSKeyword
         {
             public NestedKeyword2_2()
@@ -183,7 +183,7 @@ class NestedDsl
                 get;
             }
 
-            [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock)]
+            [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock, Use = PSKeywordUseMode.Optional)]
             class NestedKeyword2_2_1 : IPSKeyword
             {
                 public NestedKeyword2_2_1()
@@ -208,7 +208,7 @@ class NestedDsl
                     get;
                 }
 
-                [PSKeyword]
+                [PSKeyword(Use = PSKeywordUseMode.Optional)]
                 class NestedKeyword2_2_1_1 : IPSKeyword
                 {
                     public NestedKeyword2_2_1_1()

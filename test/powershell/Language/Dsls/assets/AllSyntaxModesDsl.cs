@@ -3,7 +3,7 @@ using System.Management.Automation.Language;
 [PSDsl]
 class AllSyntaxModesDsl
 {
-    [PSKeyword(Name = PSKeywordNameMode.Required, Body = PSKeywordBodyMode.Hashtable, Use = PSKeywordUseMode.OptionalMany)]
+    [PSKeyword(Name = PSKeywordNameMode.Required, Body = PSKeywordBodyMode.ScriptBlock, Use = PSKeywordUseMode.RequiredMany)]
     class AllSyntaxModesKeyword : IPSKeyword
     {
         public AllSyntaxModesKeyword()
