@@ -708,7 +708,10 @@ namespace System.Management.Automation.Language
     }
 
     /// <summary>
-    /// Represents the binding of a parameter to its argument
+    /// Represents the binding of a parameter to its argument. This encapsulates
+    /// both positional and named parameters; named parameters are stored by parameter
+    /// name, and positional parameters are stored by the string representing their
+    /// position (e.g. "2")
     /// </summary>
     public class ParameterBindingResult
     {
