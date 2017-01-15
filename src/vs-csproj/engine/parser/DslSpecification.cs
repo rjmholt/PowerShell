@@ -19,7 +19,12 @@ namespace System.Management.Automation.Language
     /// </summary>
     public abstract class Keyword
     {
-        protected Keyword() { }
+        protected Keyword()
+        {
+            PreParse = null;
+            PostParse = null;
+            SemanticCheck = null;
+        }
 
         public virtual Func<DynamicKeyword, ParseError[]> PreParse
         {
