@@ -110,7 +110,7 @@ namespace System.Management.Automation.Language
                 var paramOptions = propInfo.GetCustomAttribute<KeywordParameterAttribute>();
                 if (paramOptions.Mandatory)
                 {
-                    if (!boundParameters.ContainsKey(propInfo.Name) && !boundParameters.ContainsKey(paramOptions.Postion.ToString()))
+                    if (!boundParameters.ContainsKey(propInfo.Name) && !boundParameters.ContainsKey(paramOptions.Position.ToString()))
                     {
                         hasMissing = true;
                         errorList.Add(new ParseError(extent, "MissingParameter", "The parameter " + propInfo.Name + " was not provided"));
@@ -149,7 +149,7 @@ namespace System.Management.Automation.Language
             }
 
             // Find the property corresponding to the position if one exists, and set it
-            PropertyInfo propInfo = possibleParams.FirstOrDefault(p => p.GetCustomAttribute<KeywordParameterAttribute>().Postion == position);
+            PropertyInfo propInfo = possibleParams.FirstOrDefault(p => p.GetCustomAttribute<KeywordParameterAttribute>().Position == position);
             if (propInfo == null)
             {
                 return false;
