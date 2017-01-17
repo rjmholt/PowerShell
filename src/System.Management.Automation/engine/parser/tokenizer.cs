@@ -64,6 +64,30 @@ namespace System.Management.Automation.Language
     }
 
     /// <summary>
+    /// Defines the use mode for a dynamic keyword
+    /// (i.e. how many times it may be used in a given scope)
+    /// </summary>
+    public enum DynamicKeywordUseMode
+    {
+        /// <summary>
+        /// The keyword may be used 0-1 times
+        /// </summary>
+        Optional = 0,
+        /// <summary>
+        /// The keyword may be used any number of times
+        /// </summary>
+        OptionalMany = 1,
+        /// <summary>
+        /// The keyword must be used exactly once
+        /// </summary>
+        Required = 2,
+        /// <summary>
+        /// The keyword must be used at least once
+        /// </summary>
+        RequiredMany = 3,
+    }
+
+    /// <summary>
     /// Defines the schema/behaviour for a dynamic keyword.
     /// a constrained 
     /// </summary>
@@ -239,6 +263,7 @@ namespace System.Management.Automation.Language
                 Keyword = this.Keyword,
                 ResourceName = this.ResourceName,
                 BodyMode = this.BodyMode,
+                UseMode = this.UseMode
                 DirectCall = this.DirectCall,
                 NameMode = this.NameMode,
                 MetaStatement = this.MetaStatement,
@@ -281,9 +306,15 @@ namespace System.Management.Automation.Language
         public string ResourceName { get; set; }
 
         /// <summary>
-        /// Set to true if we should be looking for a scriptblock instead of a hashtable
+        /// Defines the syntax of the body of the dynamic keyword. Command means there
+        /// is no body
         /// </summary>
         public DynamicKeywordBodyMode BodyMode { get; set; }
+
+        /// <summary>
+        /// Defines the number of times a keyword may be used in a given scope
+        /// </summary>
+        public DynamicKeywordUseMode UseMode { get; set; }
 
         /// <summary>
         /// If true, then don't use the marshalled call. Just
@@ -314,6 +345,19 @@ namespace System.Management.Automation.Language
         /// Contains the list of properties that are reserved for future use
         /// </summary>
         public bool HasReservedProperties { get; set; }
+
+        /// <summary>
+        /// Keywords that are only defined within the scope of this one
+        /// </summary>
+        public Dictionary<string, DynamicKeyword> InnerKeywords
+        {
+            get
+            {
+                return _innerKeywords ??
+                    (_innerKeywords = new Dictionary<string, DynamicKeyword>(StringComparer.OrdinalIgnoreCase));
+            }
+        }
+        private Dictionary<string, DynamicKeyword> _innerKeywords;
 
         /// <summary>
         /// A list of the properties allowed for this constuctor

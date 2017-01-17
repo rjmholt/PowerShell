@@ -65,3 +65,6 @@ TestsResults*.xml
 
 # Vim swaps
 *.swp
+/.vs/config
+/src/vs-csproj/app.config
+*.config
