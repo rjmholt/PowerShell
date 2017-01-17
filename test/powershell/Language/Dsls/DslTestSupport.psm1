@@ -26,7 +26,7 @@ function New-TestDllModule
     Add-Type -Path $csSourcePath -OutputAssembly $dllPath -Ref $references
 }
 
-function Get-SystemPathString
+function Get-TestDrivePathString
 {
     param([string] $TestDrive)
 

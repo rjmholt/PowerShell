@@ -2,8 +2,9 @@
 Tests the creation of DynamicKeyword datastructures
 #>
 
-using module .\DslTestSupport.psm1
+using module $PSScriptRoot\DslTestSupport.psm1
 
+# Picks out a top level keyword by name, provided it is imported into the given context
 function Get-TopLevelKeywordInContext
 {
     param([powershell] $Context, [string] $KeywordName)
@@ -14,11 +15,9 @@ function Get-TopLevelKeywordInContext
 # Descends the keyword namespace tree to get the object representing the last DynamicKeyword in the list
 function Get-InnerKeyword
 {
-    param([powershell] $Context, [string] $TopLevelKeywordName, [string[]] $NestedNames)
+    param([System.Management.Automation.Language.DynamicKeyword] $TopKw, [string[]] $NestedNames)
 
-    $topKw = $Context.AddScript("[System.Management.Automation.Language.DynamicKeyword]::GetKeyword($TopLevelKeywordName)").Invoke()
-
-    $curr = $topKw
+    $curr = $TopKw
     foreach ($name in $NestedNames)
     {
         $curr = $curr.GetInnerKeyword($name)
@@ -29,311 +28,181 @@ function Get-InnerKeyword
 
 Describe "Basic DSL addition to runtime namespace" -Tags "CI" {
     BeforeAll {
-        $envModulePath = $env:PSModulePath
+        $savedModulePath = $env:PSModulePath
         $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
 
         $dslName = "BasicDsl"
-        $keywordName = "BasicKeyword"
 
         New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
+
+        $basicContext = [powershell]::Create()
     }
 
     AfterAll {
-        $env:PSModulePath = $envModulePath
+        $basicContext.Dispose()
+        $env:PSModulePath = $savedModulePath
     }
 
     BeforeEach {
-        $basicContext = [powershell]::Create()
         $basicContext.AddScript("using module $dslName").Invoke()
     }
 
     AfterEach {
-        $basicContext.Dispose()
+        $basicContext.Streams.ClearStreams()
     }
 
     It "imports the top level DSL keyword into the DynamicKeyword namespace" {
         $topLevelDslKeyword = Get-TopLevelKeywordInContext -Context $basicContext -KeywordName $dslName
         $topLevelDslKeyword.Keyword | Should Be $dslName
     }
-
-    It "contains the inner keyword of the DSL in the imported DSL keyword" {
-        $innerKeyword = Get-InnerKeyword -Context $basicContext -TopLevelKeywordName $dslName -NestedNames @($keywordName)
-        $innerKeyword.Keyword | Should Be $keywordName
-    }
-
-    It "does not have the inner keyword available at the top level" {
-        Get-TopLevelKeywordInContext -Context $basicContext -KeywordName $keywordName | Should Be $null
-    }
 }
 
 Describe "Adding syntax modes to the DynamicKeyword datastructure" -Tags "CI" {
     BeforeAll {
-        $envModulePath = $env:PSModulePath
+        $savedModulePath = $env:PSModulePath
         $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
 
+        $context = [powershell]::Create()
     }
 
     AfterAll {
-        $env:PSModulePath = $envModulePath
+        $env:PSModulePath = $savedModulePath
+        $context.Dispose()
+    }
+
+    AfterEach {
+        $context.Streams.ClearStreams()
     }
 
     Context "Default syntax mode tests" {
-        BeforeAll {
-            $defaultDslName = "BasicDsl"
-            $defaultKeywordName = "BasicKeyword"
-            New-TestDllModule -TestDrive $TestDrive -ModuleName $defaultDslName
+        $testCases = @(
+            # Defaults
+            @{ mode = "BodyMode"; expected = "Command"; condition = "default"; dsl = "BasicDsl"; keyword = "BasicDsl" },
+            @{ mode = "UseMode"; expected = "OptionalMany"; condition = "default"; dsl = "BasicDsl"; keyword = "BasicDsl" },
 
-            $dkw = Get-InnerKeyword -Context $defaultContext -TopLevelKeywordName $defaultDslName -NestedNames @($defaultKeywordName)
-        }
+            # BodyMode settings
+            @{ mode = "BodyMode"; expected = "Command"; condition = "KeywordBodyMode.Command"; dsl = "BodyModeDsl"; keyword = "CommandKeyword" },
+            @{ mode = "BodyMode"; expected = "ScriptBlock"; condition = "KeywordBodyMode.ScriptBlock"; dsl = "BodyModeDsl"; keyword = "ScriptBlockKeyword" }
+            @{ mode = "BodyMode"; expected = "Hashtable"; condition = "KeywordBodyMode.Hashtable"; dsl = "BodyModeDsl"; keyword = "HashtableKeyword" },
 
-        BeforeEach {
-            $defaultContext = [powershell]::Create()
-            $defaultContext.AddScript("using module $defaultDslName").Invoke()
-        }
+            # UseMode settings
+            @{ mode = "UseMode"; expected = "Optional"; condition = "KeywordUseMode.Optional"; dsl = "UseModeDsl"; keyword = "OptionalKeyword" },
+            @{ mode = "UseMode"; expected = "OptionalMany"; condition = "KeywordUseMode.OptionalMany"; dsl = "UseModeDsl"; keyword = "OptionalManyKeyword" },
+            @{ mode = "UseMode"; expected = "Required"; condition = "KeywordUseMode.Required"; dsl = "UseModeDsl"; keyword = "RequiredKeyword" },
+            @{ mode = "UseMode"; expected = "RequiredMany"; condition = "KeywordUseMode.RequiredMany"; dsl = "UseModeDsl"; keyword = "RequiredManyKeyword" },
 
-        AfterEach {
-            $defaultContext.Dispose()
-        }
+            # Mixed mode settings
+            @{ mode = "BodyMode"; expected = "ScriptBlock"; condition = "KeywordBodyMode.ScriptBlock"; dsl = "MixedModeDsl"; keyword = "MixedModeKeyword" },
+            @{ mode = "UseMode"; expected = "Required"; condition = "KeywordUseMode.Required"; dsl = "MixedModeDsl"; keyword = "MixedModeKeyword" }
+        )
 
-        It "has default NameMode as NoName" {
-            $dkw.NameMode | Should Be [System.Management.Automation.Language.DynamicKeywordNameMode]::NoName
-        }
-
-        It "has default BodyMode as Comamnd" {
-            $dkw.BodyMode | Should Be [System.Management.Automation.Language.DynamicKeywordBodyMode]::Command
-        }
-
-        It "has default UseMode as Required" {
-            $dkw.UseMode | Should Be [System.Management.Automation.Language.DynamicKeywordUseMode]::Required
-        }
-    }
-
-    Context "NameMode module testing" {
-        BeforeAll {
-            $nameModeDslName = "NameModeDsl"
-            $nameModeKeywordName = "NameModeKeyword"
-
-            New-TestDllModule -TestDrive $TestDrive -ModuleName $nameModeDslName
-        }
-
-        BeforeEach {
-            $nameModeContext = [powershell]::Create()
-            $nameModeContext.AddScript("using module $nameModeDslName").Invoke()
-        }
-
-        AfterEach {
-            $nameModeContext.Dispose()
-        }
-
-        It "adds the keyword NameMode to the DynamicKeyword" {
-            $kw = Get-InnerKeyword -Context $nameModeContext -TopLevelKeywordName $nameModeDslName -NestedNames @($nameModeKeywordName)
-            $kw.NameMode | Should Be [System.Management.Automation.Language.DynamicKewordNameMode]::Required
-        }
-    }
-
-    Context "BodyMode module testing" {
-        BeforeAll {
-            $bodyModeDslName = "BodyModeDsl"
-            $bodyModeKeywordName = "BodyModeKeyword"
-
-            New-TestDllModule -TestDrive $TestDrive -ModuleName $bodyModeDslName
-
-        }
-
-        BeforeEach {
-            $bodyModeContext = [powershell]::Create()
-            $bodyModeContext.AddScript("using module $bodyModeDslName").Invoke()
-        }
-
-        AfterAll {
-            $bodyModeContext.Dispose()
-        }
-
-        It "adds the keyword BodyMode to the DynamicKeyword" {
-            $kw = Get-InnerKeyword -Context $bodyModeContext -TopLevelKeywordName $bodyModeDslName -NestedNames @($bodyModeKeywordName)
-            $kw.BodyMode | Should Be [System.Management.Automation.Language.DynamicKewordBodyMode]::Hashtable
-        }
-    }
-    
-    Context "UseMode module testing" {
-        BeforeAll {
-            $useModeDslName = "UseModeDsl"
-            $useModeKeywordName = "UseModeKeyword"
-
-            New-TestDllModule -TestDrive $TestDrive -ModuleName $useModeDslName
-        }
-
-        BeforeEach {
-            $useModeContext = [powershell]::Create()
-            $useModeContext.AddScript("using module $useModeDslName").Invoke()
-        }
-
-        AfterEach {
-            $useModeContext.Dispose()
-        }
-
-        It "adds the keyword UseMode to the DynamicKeyword" {
-            $kw = Get-InnerKeyword -Context $useModeContext -TopLevelKeywordName $useModeDslName -NestedNames @($useModeKeywordName)
-            $kw.UseMode | Should Be [System.Management.Automation.Language.DynamicKewordUseMode]::Hashtable
-        }
-    }
-
-    Context "Mixed keyword mode attributes added" {
-        BeforeAll {
-            $mixedModeDslName = "MixedSyntaxModeDsl"
-
-            New-TestDllModule -TestDrive $TestDrive -ModuleName $mixedModeDslName
-        }
-
-        BeforeEach {
-            $mixedModeContext = [powershell]::Create()
-            $mixedModeContext.AddScript("using module $mixedModeDslName").Invoked()
-        }
-
-        AfterEach {
-            $mixedModeContext.Dispose()
-        }
-
-        It "sets MixedSyntaxModeNameOptionalKeyword NameMode to Optional" {
-            $kwName = "MixedSyntaxModeNameOptionalKeyword"
-            $kw = Get-InnerKeyword -Context $mixedModeContext -TopLevelKeywordName $mixedModeDslName -NestedNames @($kwName)
-            $kw.NameMode | Should Be [System.Management.Automation.Language.DynamicKeywordNameMode]::Optional
-        }
-
-        It "sets MixedSyntaxModeBodyScriptBlockKeyword BodyMode to ScriptBlock" {
-            $kwName = "MixedSyntaxModeBodyScriptBlockKeyword"
-            $kw = Get-InnerKeyword -Context $mixedModeContext -TopLevelKeywordName $mixedModeDslName -NestedNames @($kwName)
-            $kw.BodyMode | Should Be [System.Management.Automation.Language.DynamicKeywordBodyMode]::ScriptBlock
-        }
-
-        It "sets MixedSyntaxModeUseRequiredMany UseMode to RequiredMany" {
-            $kwName = "MixedSyntaxModeUseRequiredMany"
-            $kw = Get-InnerKeyword -Context $mixedModeContext -TopLevelKeywordName $mixedModeDslName -NestedNames @($kwName)
-            $kw.UseMode | Should Be [System.Management.Automation.Language.DynamicKeywordUseMode]::RequiredMany
-        }
-
-        It "sets MixedSyntaxModeAllOptionsKeyword modes to correct configurations" {
-            $kwName = "MixedSyntaxModeAllOptionsKeyword"
-            $kw = Get-InnerKeyword -Context $mixedModeContext -TopLevelKeywordName $mixedModeDslName -NestedNames @($kwName)
-            
-            $kw.NameMode | Should Be [System.Management.Automation.Language.DynamicKeywordNameMode]::Optional
-            $kw.BodyMode | Should Be [System.Management.Automation.Language.DynamicKeywordBodyMode]::Hashtable
-            $kw.UseMode  | Should Be [System.Management.Automation.Language.DynamicKeywordUseMode]::OptionalMany
+        It "sets <mode> to <expected> when specification is <condition>" -TestCases $testCases {
+            New-TestDllModule -TestDrive $TestDrive -ModuleName $dsl
+            $context.AddScript("using module $dsl").Invoke()
+            $kw = Get-TopLevelKeywordInContext -Context $context -KeywordName $keyword
+            $kw.$mode | Should Be $expected
         }
     }
 }
 
+# TODO
 Describe "Adding properties to DynamicKeyword datastructures" -Tags "CI" {
     BeforeAll {
-        $envModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
-
-        $dslName = "PropertyDsl"
-        $keywordName = "PropertyKeyword"
-
-        New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
     }
 
     BeforeEach {
-        $parameterContext = [powershell]::Create()
-        $parameterContext.AddScript("using module $dslName").Invoke()
     }
 
     AfterEach {
-        $parameterContext.Dispose()
     }
 
-    It "adds a property to the DynamicKeyword" {
-        $propertyName = "PropertyName"
-        $kw = Get-InnerKeyword -Context $parameterContext -TopLevelKeywordName $dslName -NestedNames @($keywordName)
-        $kw.Properties.$propertyName | Should Not Be $null
+    It "adds a property to the DynamicKeyword" -Pending {
     }
 }
 
 Describe "Adding parameters to DynamicKeyword datastructures" -Tags "CI" {
+    $testCases = @(
+        @{ name = "NamedParameter"; type = "string"; position = -1; mandatory = $false },
+        @{ name = "PositionalParameter"; type = "string"; position = 0; mandatory = $false },
+        @{ name = "MandatoryNamedParameter"; type = "string"; position = -1; mandatory = $true },
+        @{ name = "MandatoryPositionalParameter"; type = "string"; position = 1; mandatory = $true },
+        @{ name = "IntParameter"; type = "int"; position = -1; mandatory = $false },
+        @{ name = "CustomTypeParameter"; type = "KeywordParameterType"; position = -1; mandatory = $false }
+    )
+
     BeforeAll {
-        $envModulePath = $env:PSModulePath
+        $savedModulePath = $env:PSModulePath
         $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
 
-        $dslName = "ParameterDsl"
+        $moduleName = "ParameterDsl"
         $keywordName = "ParameterKeyword"
 
         New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
+
+        $context = [powershell]::Create()
+        $context.AddScript("using module $moduleName").Invoke()
+        $kw = Get-TopLevelKeywordInContext -Context $context -KeywordName $keywordName
     }
 
     AfterAll {
-        $env:PSModulePath = $envModulePath
+        $context.Dispose()
+        $env:PSModulePath = $savedModulePath
     }
 
-    BeforeEach {
-        $parameterContext = [powershell]::Create()
-        $parameterContext.AddScript("using module $dslName").Invoke()
+    It "adds parameter <name> with type <type>" -TestCases $testCases {
+        $kw.Parameters.$name.TypeConstraint | Should Be $type
     }
 
-    AfterEach {
-        $parameterContext.Dispose()
+    It "adds parameter <name> with mandatory set to <mandatory>" -TestCases $testCases {
+        $kw.Parameters.$name.Mandatory | Should Be $mandatory
     }
 
-    It "adds a named keyword parameter to the DynamicKeyword" {
-        $parameterName = "NamedParameter"
-        $kw = Get-InnerKeyword -Context $parameterContext -TopLevelKeywordName $dslName -NestedNames @($keywordName)
-        $kw.Parameters.$parameterName | Should Not Be $null
-    }
-
-    It "adds positional keyword parameters to the DynamicKeyword" -Pending {
-
+    It "adds parameter <name> with position set to <position>" -TestCases $testCases {
+        $kw.Parameters.$name.Position | Should Be $position
     }
 }
 
 Describe "Adding nested keywords to a DynamicKeyword" -Tags "CI" {
+    $testCases = @(
+        @{ keywordToFind = "NestedKeyword1"; pathToKeyword = @() },
+        @{ keywordToFind = "NestedKeyword2"; pathToKeyword = @() },
+        @{ keywordToFind = "NestedKeyword1_1"; pathToKeyword = @("NestedKeyword1") },
+        @{ keywordToFind = "NestedKeyword1_2"; pathToKeyword = @("NestedKeyword1") },
+        @{ keywordToFind = "NestedKeyword2_1"; pathToKeyword = @("NestedKeyword2") },
+        @{ keywordToFind = "NestedKeyword2_2"; pathToKeyword = @("NestedKeyword2") },
+        @{ keywordToFind = "NestedKeyword1_1_1"; pathToKeyword = @("NestedKeyword1", "NestedKeyword1_1") },
+        @{ keywordToFind = "NestedKeyword2_2_1"; pathToKeyword = @("NestedKeyword2", "NestedKeyword2_2") },
+        @{ keywordToFind = "NestedKeyword2_2_1_1"; pathToKeyword = @("NestedKeyword2", "NestedKeyword2_2", "NestedKeyword2_2_1") }
+    )
 
     BeforeAll {
-        $envModulePath = $env:PSModulePath
+        $savedModulePath = $env:PSModulePath
         $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
 
         $dslName = "NestedDsl"
 
         New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
+
+        $context = [powershell]::Create()
+        $context.AddScript("using module $dslName").Invoke()
+        $topKw = Get-TopLevelKeywordInContext -Context $context -KeywordName $dslName
     }
 
     AfterAll {
-        $env:PSModulePath = $envModulePath
-    }
-
-    BeforeEach {
-        $nestedContext = [powershell]::Create()
-        $nestedContext.AddScript("using module $dslName").Invoke()
-    }
-
-    AfterEach {
+        $env:PSModulePath = $savedModulePath
         $nestedContext.Dispose()
     }
 
-    It "adds a nested keyword to the upper level DynamicKeyword" {
-        $kw = Get-InnerKeyword -Context $nestedContext -TopLevelKeywordName $dslName -NestedNames @("NestedKeyword1", "NestedKeyword1_1", "NestedKeyword1_1_1")
-        $kw | Should Not Be $null
-    }
-
-    It "adds all nested keywords to the upper level DynamicKeyword" {
-        $keywordPaths = @(
-            @("NestedKeyword1", "NestedKeyword1_1", "NestedKeyword1_1_1"),
-            @("NestedKeyword1", "NestedKeyword1_2"),
-            @("NestedKeyword2", "NestedKeyword2_1"),
-            @("NestedKeyword2", "NestedKeyword2_2", "NestedKeyword2_2_1", "NestedKeyword2_2_1_1")
-        )
-
-        foreach ($path in $keywordPaths)
-        {
-            $kw = Get-InnerKeyword -Context $nestedContext -TopLevelKeywordName $dslName -NestedNames $path
-            $kw | Should Not Be $null
-        }
+    It "finds the inner keyword <keywordToFind> under the according path" -TestCases $testCases {
+        $innerKw = Get-InnerKeyword -TopKw $topKw -NestedNames $($pathToKeyword + $keywordToFind)
+        $innerKw.Keyword | Should Be $keywordToFind
     }
 }
 
 Describe "Adding PreParse, PostParse and SemanticCheck to a DynamicKeyword datastructure" {
 
     BeforeAll {
-        $envModulePath = $env:PSModulePath
+        $savedModulePath = $env:PSModulePath
         $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
 
         $dslName = "SemanticDsl"
@@ -348,10 +217,10 @@ Describe "Adding PreParse, PostParse and SemanticCheck to a DynamicKeyword datas
     }
 
     AfterAll {
-        $env:PSModulePath = $envModulePath
+        $env:PSModulePath = $savedModulePath
     }
 
-    It "adds the PreParse action to the DynamicKeyword" {
+    It "adds the PreParse action to the DynamicKeyword" -Pending {
         $kw.PreParse | Should Not Be $null
 
         if ($kw.PreParse -ne $null)
@@ -360,7 +229,7 @@ Describe "Adding PreParse, PostParse and SemanticCheck to a DynamicKeyword datas
         }
     }
 
-    It "adds the PostParse action to the DynamicKeyword" {
+    It "adds the PostParse action to the DynamicKeyword" -Pending {
         $kw.PostParse | Should Not Be $null
 
         if ($kw.PostParse -ne $null)
@@ -369,7 +238,7 @@ Describe "Adding PreParse, PostParse and SemanticCheck to a DynamicKeyword datas
         }
     }
 
-    It "adds the SemanticCheck action to the DynamicKeyword" {
+    It "adds the SemanticCheck action to the DynamicKeyword" -Pending {
         $kw.SemanticCheck | Should Not Be $null
 
         if ($kw.SemanticCheck -ne $null)
@@ -379,6 +248,7 @@ Describe "Adding PreParse, PostParse and SemanticCheck to a DynamicKeyword datas
     }
 }
 
+# TODO: Create a full DSL to test for this
 Describe "Full keyword definition datastructure addition" {
     It "adds the dsl name to the namespace" -Pending {
 

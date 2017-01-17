@@ -250,7 +250,7 @@ namespace System.Management.Automation.Language
 
     /// <summary>
     /// Specifies the number of times a keyword may be used in a block.
-    /// Defaults to Optional.
+    /// Defaults to OptionalMany.
     /// </summary>
     public enum KeywordUseMode
     {
@@ -272,7 +272,7 @@ namespace System.Management.Automation.Language
         public KeywordAttribute()
         {
             this.bodyMode = KeywordBodyMode.Command;
-            this.useMode = KeywordUseMode.Optional;
+            this.useMode = KeywordUseMode.OptionalMany;
         }
 
         public virtual KeywordBodyMode Body

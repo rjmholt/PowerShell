@@ -1,237 +1,43 @@
 using System.Management.Automation.Language;
 
-[PSDsl]
+[Keyword(Body = KeywordBodyMode.ScriptBlock)]
 class NestedDsl
 {
-    [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock, Use = PSKeywordUseMode.Optional)]
-    class NestedKeyword1 : IPSKeyword
+    [Keyword(Body = PSKeywordBodyMode.ScriptBlock)]
+    class NestedKeyword1 : Keyword
     {
-        public NestedKeyword1()
+        [Keyword(Body = PSKeywordBodyMode.ScriptBlock)]
+        class NestedKeyword1_1 : Keyword
         {
-            PreParse = null;
-            PostParse = (dynamicKeywordStatementAst) => null;
-            SemanticCheck = null;
-        }
-
-        public Func<DynamicKeyword, ParseError[]> PreParse
-        {
-            get;
-        }
-
-        public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
-        {
-            get;
-        }
-
-        public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
-        {
-            get;
-        }
-
-        [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock, Use = PSKeywordUseMode.Optional)]
-        class NestedKeyword1_1 : IPSKeyword
-        {
-            public NestedKeyword1_1()
+            [Keyword()]
+            class NestedKeyword1_1_1 : Keyword
             {
-                PreParse = null;
-                PostParse = (dynamicKeywordStatementAst) => null;
-                SemanticCheck = null;
-            }
-
-            public Func<DynamicKeyword, ParseError[]> PreParse
-            {
-                get;
-            }
-
-            public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
-            {
-                get;
-            }
-
-            public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
-            {
-                get;
-            }
-
-            [PSKeyword(Use = PSKeywordUseMode.Optional)]
-            class NestedKeyword1_1_1 : IPSKeyword
-            {
-                public NestedKeyword1_1_1()
-                {
-                    PreParse = null;
-                    PostParse = (dynamicKeywordStatementAst) => null;
-                    SemanticCheck = null;
-                }
-
-                public Func<DynamicKeyword, ParseError[]> PreParse
-                {
-                    get;
-                }
-
-                public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
-                {
-                    get;
-                }
-
-                public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
-                {
-                    get;
-                }
             }
         }
 
-        [PSKeyword(Use = PSKeywordUseMode.Optional)]
-        class NestedKeyword1_2 : IPSKeyword
+        [Keyword(Use = PSKeywordUseMode.Optional)]
+        class NestedKeyword1_2 : Keyword
         {
-            public NestedKeyword1_2()
-            {
-                PreParse = null;
-                PostParse = (dynamicKeywordStatementAst) => null;
-                SemanticCheck = null;
-            }
-
-            public Func<DynamicKeyword, ParseError[]> PreParse
-            {
-                get;
-            }
-
-            public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
-            {
-                get;
-            }
-
-            public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
-            {
-                get;
-            }
         }
     }
 
-    [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock, Use = PSKeywordUseMode.Optional)]
-    class NestedKeyword2 : IPSKeyword
+    [Keyword(Body = PSKeywordBodyMode.ScriptBlock)]
+    class NestedKeyword2 : Keyword
     {
-        public NestedKeyword2()
+        [Keyword()]
+        class NestedKeyword2_1 : Keyword
         {
-            PreParse = null;
-            PostParse = (dynamicKeywordStatementAst) => null;
-            SemanticCheck = null;
         }
 
-        public Func<DynamicKeyword, ParseError[]> PreParse
+        [Keyword(Body = PSKeywordBodyMode.ScriptBlock)]
+        class NestedKeyword2_2 : Keyword
         {
-            get;
-        }
-
-        public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
-        {
-            get;
-        }
-
-        public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
-        {
-            get;
-        }
-
-        [PSKeyword(Use = PSKeywordUseMode.Optional)]
-        class NestedKeyword2_1 : IPSKeyword
-        {
-            public NestedKeyword2_1()
+            [Keyword(Body = PSKeywordBodyMode.ScriptBlock)]
+            class NestedKeyword2_2_1 : Keyword
             {
-                PreParse = null;
-                PostParse = (dynamicKeywordStatementAst) => null;
-                SemanticCheck = null;
-            }
-
-            public Func<DynamicKeyword, ParseError[]> PreParse
-            {
-                get;
-            }
-
-            public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
-            {
-                get;
-            }
-
-            public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
-            {
-                get;
-            }
-        }
-
-        [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock, Use = PSKeywordUse.Optional)]
-        class NestedKeyword2_2 : IPSKeyword
-        {
-            public NestedKeyword2_2()
-            {
-                PreParse = null;
-                PostParse = (dynamicKeywordStatementAst) => null;
-                SemanticCheck = null;
-            }
-
-            public Func<DynamicKeyword, ParseError[]> PreParse
-            {
-                get;
-            }
-
-            public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
-            {
-                get;
-            }
-
-            public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
-            {
-                get;
-            }
-
-            [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock, Use = PSKeywordUseMode.Optional)]
-            class NestedKeyword2_2_1 : IPSKeyword
-            {
-                public NestedKeyword2_2_1()
+                [Keyword()]
+                class NestedKeyword2_2_1_1 : Keyword
                 {
-                    PreParse = null;
-                    PostParse = (dynamicKeywordStatementAst) => null;
-                    SemanticCheck = null;
-                }
-
-                public Func<DynamicKeyword, ParseError[]> PreParse
-                {
-                    get;
-                }
-
-                public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
-                {
-                    get;
-                }
-
-                public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
-                {
-                    get;
-                }
-
-                [PSKeyword(Use = PSKeywordUseMode.Optional)]
-                class NestedKeyword2_2_1_1 : IPSKeyword
-                {
-                    public NestedKeyword2_2_1_1()
-                    {
-                        PreParse = null;
-                        PostParse = (dynamicKeywordStatementAst) => null;
-                        SemanticCheck = null;
-                    }
-
-                    public Func<DynamicKeyword, ParseError[]> PreParse
-                    {
-                        get;
-                    }
-
-                    public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
-                    {
-                        get;
-                    }
-
-                    public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
-                    {
-                        get;
-                    }
                 }
             }
         }

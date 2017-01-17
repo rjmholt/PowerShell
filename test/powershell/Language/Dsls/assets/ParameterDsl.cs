@@ -1,59 +1,55 @@
 using System.Management.Automation;
 
-namespace Tests.PowerShell.Dsl
+enum KeywordParameterType
 {
-    [PSDsl]
-    public class ParameterDsl
+    Type1,
+    Type2,
+}
+
+[Keyword()]
+public class ParameterKeyword : Keyword
+{
+    public ParameterKeyword()
     {
-        enum KeywordParameterType
-        {
-            Type1,
-            Type2,
-        }
+        PostParse = (dynamicKeywordStatementAst) => {
+            //TODO: Add testable, parameter-based functionality here
+            return null;
+        };
+    }
 
-        [PSKeyword]
-        public class ParameterKeyword : IPSKeyword
-        {
-            public ParameterKeyword()
-            {
-                PreParse = null;
-                PostParse = (dynamicKeywordStatementAst) => {
-                    //TODO: Add testable, parameter-based functionality here
-                    
-                    return new ParseError[0];
-                };
-                SemanticCheck = null;
-            }
+    [KeywordParameter()]
+    string NamedParameter
+    {
+        get; set;
+    }
 
-            /*
-            TODO: Figure out how (if?) positional parameters should be done...
+    [KeywordParameter(Position = 0)]
+    string PositionalParameter
+    {
+        get; set;
+    }
 
-            [PSKeywordParameter]
-            int keywordIntPositionalParameter;
+    [KeywordParameter(Mandatory = true)]
+    string MandatoryNamedParamter
+    {
+        get; set;
+    }
 
-            [PSKeywordParameter]
-            string keywordStringPositionalParameter;
-            */
+    [KeywordParameter(Position = 1, Mandatory = true)]
+    string MandatoryPositionalParameter
+    {
+        get; set;
+    }
 
-            [PSKeywordParameter]
-            KeywordParameterType keywordCustomTypeParameter;
+    [KeywordParameter()]
+    int IntParameter
+    {
+        get; set;
+    }
 
-            string keywordStringNamedParameter;
-
-            public Func<DynamicKeyword, ParseError[]> PreParse
-            {
-                get;
-            }
-
-            public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
-            {
-                get;
-            }
-
-            public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
-            {
-                get;
-            }
-        }
+    [KeywordParameter()]
+    KeywordParameterType CustomTypeParameter
+    {
+        get; set;
     }
 }

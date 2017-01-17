@@ -1,70 +1,30 @@
 using System.Management.Automation.Language;
 
-[PSDsl]
-class ScopedTypeDsl
+[Keyword(Body = KeywordBodyMode.ScriptBlock)]
+class ScopedTypeKeyword : Keyword
 {
-    [PSKeyword(Body = PSKeywordBodyMode.ScriptBlock)]
-    class ScopedTypeKeyword : IPSKeyword
+    public ScopedTypeKeyword()
     {
-        public ScopedTypeKeyword()
+    }
+
+    enum ScopedParameterType
+    {
+        Type1,
+        Type2
+    }
+
+    [Keyword]
+    class InnerScopedTypeKeyword : Keyword
+    {
+        public InnerScopedTypeKeyword()
         {
-            PreParse = null;
-            PostParse = (dynamicKeywordStatementAst) => null;
-            SemanticCheck = null;
         }
 
-        Func<DynamicKeyword, ParseError[]> PreParse
+        [KeywordParameter]
+        ScopedParameterType InnerScopedParameter
         {
             get;
-        }
-
-        Func<DynamicKeywordStatementAst, ParseError[]> PostParse
-        {
-            get;
-        }
-
-        Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
-        {
-            get;
-        }
-
-        enum ScopedParameterType
-        {
-            Type1,
-            Type2
-        }
-
-        [PSKeyword]
-        class InnerScopedTypeKeyword : IPSKeyword
-        {
-            public InnerScopedTypeKeyword()
-            {
-                PreParse = null;
-                PostParse = (dynamicKeywordStatementAst) => null;
-                SemanticCheck = null;
-            }
-
-            Func<DynamicKeyword, ParseError[]> PreParse
-            {
-                get;
-            }
-
-            Func<DynamicKeywordStatementAst, ParseError[]> PostParse
-            {
-                get;
-            }
-
-            Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
-            {
-                get;
-            }
-
-            [PSKeywordParameter]
-            ScopedParameterType InnerScopedParameter
-            {
-                get;
-                set;
-            }
+            set;
         }
     }
 }
