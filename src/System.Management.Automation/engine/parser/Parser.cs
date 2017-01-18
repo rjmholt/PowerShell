@@ -4509,6 +4509,12 @@ namespace System.Management.Automation.Language
             }
         }
 
+        /// <summary>
+        /// Takes the provided name for an assembly (which could be in a number of formats)
+        /// and translate it to an absolute file path (as a string value)
+        /// </summary>
+        /// <param name="name">the iser-provided assembly name or path</param>
+        /// <returns>a string representing the absolute path to the assembly</returns>
         private StringConstantExpressionAst ResolveUsingAssembly(StringConstantExpressionAst name)
         {
             var assemblyName = name.Value;

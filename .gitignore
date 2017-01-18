@@ -62,3 +62,6 @@ gen
 
 # TestsResults
 TestsResults*.xml
+/src/vs-csproj/app.config
+/src/vs-csproj/packages.config
+/.vs/config/applicationhost.config
