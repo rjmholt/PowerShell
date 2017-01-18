@@ -35,29 +35,50 @@ Describe "Basic DSL addition to runtime namespace" -Tags "CI" {
 
         New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
 
-        $basicContext = [powershell]::Create()
+        $context = [powershell]::Create()
     }
 
     AfterAll {
-        $basicContext.Dispose()
+        $context.Dispose()
         $env:PSModulePath = $savedModulePath
     }
 
     BeforeEach {
-        $basicContext.AddScript("using module $dslName").Invoke()
+        $context.AddScript("using module $dslName").Invoke()
     }
 
     AfterEach {
-        $basicContext.Streams.ClearStreams()
+        $context.Streams.ClearStreams()
     }
 
     It "imports the top level DSL keyword into the DynamicKeyword namespace" {
-        $topLevelDslKeyword = Get-TopLevelKeywordInContext -Context $basicContext -KeywordName $dslName
+        $topLevelDslKeyword = Get-TopLevelKeywordInContext -Context $context -KeywordName $dslName
         $topLevelDslKeyword.Keyword | Should Be $dslName
     }
 }
 
 Describe "Adding syntax modes to the DynamicKeyword datastructure" -Tags "CI" {
+    $testCases = @(
+        # Defaults
+        @{ mode = "BodyMode"; expected = "Command"; condition = "default"; dsl = "BasicDsl"; keyword = "BasicDsl" },
+        @{ mode = "UseMode"; expected = "OptionalMany"; condition = "default"; dsl = "BasicDsl"; keyword = "BasicDsl" },
+
+        # BodyMode settings
+        @{ mode = "BodyMode"; expected = "Command"; condition = "DynamicKeywordBodyMode.Command"; dsl = "BodyModeDsl"; keyword = "CommandKeyword" },
+        @{ mode = "BodyMode"; expected = "ScriptBlock"; condition = "DynamicKeywordBodyMode.ScriptBlock"; dsl = "BodyModeDsl"; keyword = "ScriptBlockKeyword" }
+        @{ mode = "BodyMode"; expected = "Hashtable"; condition = "DynamicKeywordBodyMode.Hashtable"; dsl = "BodyModeDsl"; keyword = "HashtableKeyword" },
+
+        # UseMode settings
+        @{ mode = "UseMode"; expected = "Optional"; condition = "DynamicKeywordUseMode.Optional"; dsl = "UseModeDsl"; keyword = "OptionalKeyword" },
+        @{ mode = "UseMode"; expected = "OptionalMany"; condition = "DynamicKeywordUseMode.OptionalMany"; dsl = "UseModeDsl"; keyword = "OptionalManyKeyword" },
+        @{ mode = "UseMode"; expected = "Required"; condition = "DynamicKeywordUseMode.Required"; dsl = "UseModeDsl"; keyword = "RequiredKeyword" },
+        @{ mode = "UseMode"; expected = "RequiredMany"; condition = "DynamicKeywordUseMode.RequiredMany"; dsl = "UseModeDsl"; keyword = "RequiredManyKeyword" },
+
+        # Mixed mode settings
+        @{ mode = "BodyMode"; expected = "ScriptBlock"; condition = "DynamicKeywordBodyMode.ScriptBlock"; dsl = "MixedModeDsl"; keyword = "MixedModeKeyword" },
+        @{ mode = "UseMode"; expected = "Required"; condition = "DynamicKeywordUseMode.Required"; dsl = "MixedModeDsl"; keyword = "MixedModeKeyword" }
+    )
+
     BeforeAll {
         $savedModulePath = $env:PSModulePath
         $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
@@ -66,42 +87,19 @@ Describe "Adding syntax modes to the DynamicKeyword datastructure" -Tags "CI" {
     }
 
     AfterAll {
-        $env:PSModulePath = $savedModulePath
         $context.Dispose()
+        $env:PSModulePath = $savedModulePath
     }
 
     AfterEach {
         $context.Streams.ClearStreams()
     }
 
-    Context "Default syntax mode tests" {
-        $testCases = @(
-            # Defaults
-            @{ mode = "BodyMode"; expected = "Command"; condition = "default"; dsl = "BasicDsl"; keyword = "BasicDsl" },
-            @{ mode = "UseMode"; expected = "OptionalMany"; condition = "default"; dsl = "BasicDsl"; keyword = "BasicDsl" },
-
-            # BodyMode settings
-            @{ mode = "BodyMode"; expected = "Command"; condition = "KeywordBodyMode.Command"; dsl = "BodyModeDsl"; keyword = "CommandKeyword" },
-            @{ mode = "BodyMode"; expected = "ScriptBlock"; condition = "KeywordBodyMode.ScriptBlock"; dsl = "BodyModeDsl"; keyword = "ScriptBlockKeyword" }
-            @{ mode = "BodyMode"; expected = "Hashtable"; condition = "KeywordBodyMode.Hashtable"; dsl = "BodyModeDsl"; keyword = "HashtableKeyword" },
-
-            # UseMode settings
-            @{ mode = "UseMode"; expected = "Optional"; condition = "KeywordUseMode.Optional"; dsl = "UseModeDsl"; keyword = "OptionalKeyword" },
-            @{ mode = "UseMode"; expected = "OptionalMany"; condition = "KeywordUseMode.OptionalMany"; dsl = "UseModeDsl"; keyword = "OptionalManyKeyword" },
-            @{ mode = "UseMode"; expected = "Required"; condition = "KeywordUseMode.Required"; dsl = "UseModeDsl"; keyword = "RequiredKeyword" },
-            @{ mode = "UseMode"; expected = "RequiredMany"; condition = "KeywordUseMode.RequiredMany"; dsl = "UseModeDsl"; keyword = "RequiredManyKeyword" },
-
-            # Mixed mode settings
-            @{ mode = "BodyMode"; expected = "ScriptBlock"; condition = "KeywordBodyMode.ScriptBlock"; dsl = "MixedModeDsl"; keyword = "MixedModeKeyword" },
-            @{ mode = "UseMode"; expected = "Required"; condition = "KeywordUseMode.Required"; dsl = "MixedModeDsl"; keyword = "MixedModeKeyword" }
-        )
-
-        It "sets <mode> to <expected> when specification is <condition>" -TestCases $testCases {
-            New-TestDllModule -TestDrive $TestDrive -ModuleName $dsl
-            $context.AddScript("using module $dsl").Invoke()
-            $kw = Get-TopLevelKeywordInContext -Context $context -KeywordName $keyword
-            $kw.$mode | Should Be $expected
-        }
+    It "sets <mode> to <expected> when specification is <condition>" -TestCases $testCases {
+        New-TestDllModule -TestDrive $TestDrive -ModuleName $dsl
+        $context.AddScript("using module $dsl").Invoke()
+        $kw = Get-TopLevelKeywordInContext -Context $context -KeywordName $keyword
+        $kw.$mode | Should Be $("[DynamicKeyword$mode]::$expected")
     }
 }
 

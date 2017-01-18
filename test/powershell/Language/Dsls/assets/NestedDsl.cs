@@ -1,12 +1,12 @@
 using System.Management.Automation.Language;
 
-[Keyword(Body = KeywordBodyMode.ScriptBlock)]
+[Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
 class NestedDsl
 {
-    [Keyword(Body = PSKeywordBodyMode.ScriptBlock)]
+    [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
     class NestedKeyword1 : Keyword
     {
-        [Keyword(Body = PSKeywordBodyMode.ScriptBlock)]
+        [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
         class NestedKeyword1_1 : Keyword
         {
             [Keyword()]
@@ -21,7 +21,7 @@ class NestedDsl
         }
     }
 
-    [Keyword(Body = PSKeywordBodyMode.ScriptBlock)]
+    [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
     class NestedKeyword2 : Keyword
     {
         [Keyword()]
@@ -29,10 +29,10 @@ class NestedDsl
         {
         }
 
-        [Keyword(Body = PSKeywordBodyMode.ScriptBlock)]
+        [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
         class NestedKeyword2_2 : Keyword
         {
-            [Keyword(Body = PSKeywordBodyMode.ScriptBlock)]
+            [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
             class NestedKeyword2_2_1 : Keyword
             {
                 [Keyword()]

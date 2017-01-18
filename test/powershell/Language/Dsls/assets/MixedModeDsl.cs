@@ -1,6 +1,6 @@
 using System.Management.Automation.Language;
 
-[Keyword(Body = KeywordBodyMode.ScriptBlock, Use = KeywordUseMode.Required)]
+[Keyword(Body = DynamicKeywordBodyMode.ScriptBlock, Use = DynamicKeywordUseMode.Required)]
 class MixedModesKeyword : Keyword
 {
 }

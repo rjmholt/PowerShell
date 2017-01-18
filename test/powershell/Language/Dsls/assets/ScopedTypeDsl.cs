@@ -13,14 +13,14 @@ class ScopedTypeKeyword : Keyword
         Type2
     }
 
-    [Keyword]
+    [Keyword()]
     class InnerScopedTypeKeyword : Keyword
     {
         public InnerScopedTypeKeyword()
         {
         }
 
-        [KeywordParameter]
+        [KeywordParameter()]
         ScopedParameterType InnerScopedParameter
         {
             get;

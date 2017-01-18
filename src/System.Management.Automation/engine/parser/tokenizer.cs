@@ -263,7 +263,7 @@ namespace System.Management.Automation.Language
                 Keyword = this.Keyword,
                 ResourceName = this.ResourceName,
                 BodyMode = this.BodyMode,
-                UseMode = this.UseMode
+                UseMode = this.UseMode,
                 DirectCall = this.DirectCall,
                 NameMode = this.NameMode,
                 MetaStatement = this.MetaStatement,

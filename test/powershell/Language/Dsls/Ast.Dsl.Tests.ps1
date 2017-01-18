@@ -106,6 +106,42 @@ $dslName
     }
 }
 
+Describe "DSL Body most AST parsing" {
+    $testCases = @(
+        @{ keyword = "HashtableBodyKeyword"; script = "{0} {{ x = 1 }}"; bodyType = "Hashtable" },
+        @{ keyword = "ScriptBlockBodyKeyword"; script = "{0} {{ foo }}"; bodyType = "ScriptBlockiExpression" },
+    )
+
+    BeforeAll {
+        $dslName = "BodyModeDsl"
+
+        $savedModulePath = $env:PSModulePath
+        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
+
+        New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
+    }
+
+    AfterAll {
+        $env:PSModulePath = $savedModulePath
+    }
+
+    It "has a body AST of type <bodyType> as a child AST" -TestCases $testCases {
+        $ast = [scriptblock]::Create($script -f $keyword).Ast
+
+        $kwStmt = Get-KeywordByName -Ast $ast -Name $keyword
+
+        $kwStmt.BodyExpression | Should BeOfType $("[System.Management.Automation.Language.$($bodyType)Ast]")
+    }
+
+    It "does not parse scriptblock as body" {
+        $ast = [scriptblock]::Create("CommandBodyKeyword { foo }").Ast
+
+        $kwStmt = Get-KeywordByName -Ast $ast -Name "CommandBodyKeyword"
+
+        $kwStmt.BodyExpression | Should Be $null
+    }
+}
+
 Describe "Full DSL example loads into AST" -Tags "CI" {
     # TODO: Test AST of full DSL here
 }

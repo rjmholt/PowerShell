@@ -9,6 +9,8 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
+using System.Collections.Immutable;
+using System.Text;
 
 // TODO:
 //   - Check ParseError errorId strings
@@ -307,6 +309,8 @@ namespace System.Management.Automation.Language
 
     #endregion /* DSL definition attributes */
 
+    #region DSL Metadata Reading
+
     /// <summary>
     /// A class that wraps a PSModuleInfo object and reads from the module it points
     /// to in order to read in a PowerShell DSL definition. This should fail politely
@@ -315,6 +319,8 @@ namespace System.Management.Automation.Language
     /// </summary>
     internal class DslDllModuleMetadataReader
     {
+        private static CustomAttributeTypeProvider s_keywordAttributeTypeProvider;
+
         private readonly PSModuleInfo _moduleInfo;
 
         /// <summary>
@@ -423,7 +429,7 @@ namespace System.Management.Automation.Language
 
             // Set all the properties for the keyword itself
             string keywordName = metadataReader.GetString(typeDef.Name);
-            var keyword =  new DynamicKeyword()
+            var keyword = new DynamicKeyword()
             {
                 ImplementingModule = _moduleInfo.Name,
                 Keyword = keywordName,
@@ -438,31 +444,177 @@ namespace System.Management.Automation.Language
 
         private bool IsKeywordParameterAttribute(MetadataReader metadataReader, CustomAttribute keywordParameterAttribute)
         {
-            switch (keywordParameterAttribute.Constructor.Kind)
-            {
-                case HandleKind.MethodDefinition:
-                    // TODO: Work out how this should operate, preferably using methodDef.DecodeSignature()
-                    var methodDef = metadataReader.GetMethodDefinition((MethodDefinitionHandle)keywordParameterAttribute.Constructor);
-                    break;
-                case HandleKind.MemberReference:
-                    return false;
-            }
+            // TODO: Read in attribute, read the constructor's signature and verify it is of correct type
             return false;
         }
 
         private DynamicKeywordParameter ReadParameterSpecification(MetadataReader metadataReader, PropertyDefinition property, CustomAttribute keywordParameterAttribute)
         {
+            // TODO: Read in the parameter values and construct a DynamicKeywordParameter from its type
             return null;
         }
 
         private bool IsKeywordAttribute(MetadataReader metadataReader, CustomAttribute keywordAttribute)
         {
+            // TODO: Read the attribute in, check the constructor's signature and verify it is of the correct type
+            return false;
+        }
+
+        private bool IsAttributeOfType(MetadataReader metadataReader, CustomAttribute attribute, Type type)
+        {
+            // TODO: Read attribute signature to determine its type and work out what it is
             return false;
         }
 
         private void SetKeywordAttributeParameters(MetadataReader metadataReader, CustomAttribute keywordAttribute, out DynamicKeywordBodyMode bodyMode, out DynamicKeywordUseMode useMode)
         {
+            // TODO: Make this more robust
+            var keywordValue = keywordAttribute.DecodeValue(KeywordAttributeTypeProvider);
+            bodyMode = (DynamicKeywordBodyMode) keywordValue.NamedArguments.FirstOrDefault(arg => arg.Type == typeof(DynamicKeywordBodyMode)).Value;
+            useMode = (DynamicKeywordUseMode)keywordValue.NamedArguments.FirstOrDefault(arg => arg.Type == typeof(DynamicKeywordNameMode)).Value;
         }
 
+        /// <summary>
+        /// A static reference to a type provider object that provides types for custom attribute values
+        /// </summary>
+        private CustomAttributeTypeProvider KeywordAttributeTypeProvider
+        {
+            get
+            {
+                return s_keywordAttributeTypeProvider ??
+                    (s_keywordAttributeTypeProvider = new CustomAttributeTypeProvider());
+            }
+        }
+
+        /// <summary>
+        /// Type provider to translate the MetadataReader's decoded type into a Type
+        /// </summary>
+        private class CustomAttributeTypeProvider : ICustomAttributeTypeProvider<Type>
+        {
+            public Type GetPrimitiveType(PrimitiveTypeCode typeCode)
+            {
+                switch (typeCode)
+                {
+                    case PrimitiveTypeCode.Boolean:
+                        return typeof(bool);
+
+                    case PrimitiveTypeCode.Byte:
+                        return typeof(byte);
+
+                    case PrimitiveTypeCode.Char:
+                        return typeof(char);
+
+                    case PrimitiveTypeCode.Double:
+                        return typeof(double);
+
+                    case PrimitiveTypeCode.Int16:
+                        return typeof(short);
+
+                    case PrimitiveTypeCode.Int32:
+                        return typeof(int);
+
+                    case PrimitiveTypeCode.Int64:
+                        return typeof(long);
+
+                    case PrimitiveTypeCode.IntPtr:
+                        return typeof(IntPtr);
+
+                    case PrimitiveTypeCode.Object:
+                        return typeof(object);
+
+                    case PrimitiveTypeCode.SByte:
+                        return typeof(sbyte);
+
+                    case PrimitiveTypeCode.Single:
+                        return typeof(float);
+
+                    case PrimitiveTypeCode.String:
+                        return typeof(string);
+
+                    case PrimitiveTypeCode.TypedReference:
+                        return typeof(TypedReference);
+
+                    case PrimitiveTypeCode.UInt16:
+                        return typeof(ushort);
+
+                    case PrimitiveTypeCode.UInt32:
+                        return typeof(uint);
+
+                    case PrimitiveTypeCode.UInt64:
+                        return typeof(ulong);
+
+                    case PrimitiveTypeCode.UIntPtr:
+                        return typeof(UIntPtr);
+
+                    case PrimitiveTypeCode.Void:
+                        return typeof(void);
+
+                    default:
+                        throw new ArgumentOutOfRangeException("Unrecognized primitive type: " + typeCode.ToString());
+                }
+            }
+
+            public Type GetSystemType()
+            {
+                return typeof(Type);
+            }
+
+            public Type GetSZArrayType(Type elementType)
+            {
+                return Type.GetType(elementType.ToString() + "[]");
+            }
+
+            public Type GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind=0)
+            {
+                TypeDefinition typeDef = reader.GetTypeDefinition(handle);
+
+                string typeDefName = reader.GetString(typeDef.Name);
+
+                // Check if type definition is nested
+                // This will be typeDef.Attributes.IsNested() in later releases
+                if (typeDef.Attributes.HasFlag((TypeAttributes)0x00000006))
+                {
+                    TypeDefinitionHandle declaringTypeHandle = typeDef.GetDeclaringType();
+                    Type enclosingType = GetTypeFromDefinition(reader, declaringTypeHandle);
+                    return Type.GetType(Assembly.CreateQualifiedName(enclosingType.AssemblyQualifiedName, enclosingType.ToString() + "+" + typeDefName));
+                }
+
+                string typeDefNamespace = reader.GetString(typeDef.Namespace);
+                return Type.GetType(Assembly.CreateQualifiedName(typeDefNamespace, typeDefName));
+            }
+
+            public Type GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind=0)
+            {
+                TypeReference typeRef = reader.GetTypeReference(handle);
+                string typeRefName = reader.GetString(typeRef.Name);
+                if (typeRef.Namespace.IsNil)
+                {
+                    return Type.GetType(typeRefName);
+                }
+                string typeRefNamespace = reader.GetString(typeRef.Namespace);
+                return Type.GetType(Assembly.CreateQualifiedName(typeRefNamespace, typeRefName));
+            }
+
+            public Type GetTypeFromSerializedName(string name)
+            {
+                return Type.GetType(name);
+            }
+
+            public PrimitiveTypeCode GetUnderlyingEnumType(Type type)
+            {
+                if (type == typeof(DynamicKeywordBodyMode) || type == typeof(DynamicKeywordUseMode))
+                {
+                    return PrimitiveTypeCode.Int32;
+                }
+
+                throw new ArgumentOutOfRangeException("Not a known parameter enum type");
+            }
+
+            public bool IsSystemType(Type type)
+            {
+                return type == typeof(Type);
+            }
+        }
     }
+    #endregion /* DSL Metadata Reading */
 }
