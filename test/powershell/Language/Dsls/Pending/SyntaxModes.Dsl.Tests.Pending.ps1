@@ -4,7 +4,7 @@ Tests usage of keyword syntax mode specifications
 
 # TODO: Decide how and whether parse modes should fail
 
-using module $PSScriptRoot\DslTestSupport.psm1
+Import-Module $PSScriptRoot\DslTestSupport.psm1
 
 Describe "DSL keyword Name/Body mode functionality" -Tags "CI" {
     $testCases = @(

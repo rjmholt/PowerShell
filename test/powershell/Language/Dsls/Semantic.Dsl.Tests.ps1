@@ -2,7 +2,7 @@
 Tests functionality of semantic features in DynamicKeywords
 #>
 
-import module $PSScriptRoot\DslTestSupport.psm1
+Import-Module $PSScriptRoot\DslTestSupport.psm1
 
 Describe "Execution of semantic actions" -Tags "CI" {
     $testCases = @(
@@ -24,7 +24,10 @@ Describe "Execution of semantic actions" -Tags "CI" {
     }
 
     AfterAll {
-        $context.Dispose()
+        if ($context -ne $null)
+        {
+            $context.Dispose()
+        }
     }
 
     BeforeEach {
@@ -32,6 +35,8 @@ Describe "Execution of semantic actions" -Tags "CI" {
     }
 
     It "throws a simple error in <phase> phase" -TestCases $testCases {
+        param($phase, $keyword, $errorId)
+
         try
         {
             $context.AddScript("$outerKeyword { $keyword }")
@@ -46,7 +51,7 @@ Describe "Execution of semantic actions" -Tags "CI" {
 Describe "Manipulation of AST/DynamicKeyword with semantic actions" -Tags "CI" {
     $testCases = @(
         @{ action = "PostParse"; keyword = "AstManipulationPostParseKeyword"; expected = "PostParseTest" },
-        @{ action = "SemanticCheck"; keyword = "AstManipulationSemanticKeyword"; expected = "SemanticTest" },
+        @{ action = "SemanticCheck"; keyword = "AstManipulationSemanticKeyword"; expected = "SemanticTest" }
     )
 
     BeforeAll {
@@ -62,7 +67,10 @@ Describe "Manipulation of AST/DynamicKeyword with semantic actions" -Tags "CI" {
     }
 
     AfterAll {
-        $context.Dispose()
+        if ($context -ne $null)
+        {
+            $context.Dispose()
+        }
     }
 
     BeforeEach {
@@ -70,6 +78,8 @@ Describe "Manipulation of AST/DynamicKeyword with semantic actions" -Tags "CI" {
     }
 
     It "Finds a string in the inner scriptblock and throws it in a ParseError using <action>" -TestCases $testCases {
+        param($action, $keyword, $expected)
+
         try
         {
             $context.AddScript("$outerKeyword { $keyword { $expected } }").Invoke()

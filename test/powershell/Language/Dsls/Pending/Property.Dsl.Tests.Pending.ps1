@@ -1,6 +1,8 @@
 <#
 Tests DynamicKeyword Property and Parameter functionality
 #>
+Import-Module $PSScriptRoot\DslTestSupport.psm1
+
 Describe "DSL keyword property handling" -Tags "CI" {
 
 }

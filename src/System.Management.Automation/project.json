@@ -36,14 +36,14 @@
         }
     },
 
-    "dependencies": {
-        "Microsoft.Management.Infrastructure": "1.0.0-alpha*"
-    },
+  "dependencies": {
+    "Microsoft.Management.Infrastructure": "1.0.0-alpha*"
+  },
 
     "frameworks": {
         "netstandard1.6": {
-            "imports": [ "dnxcore50" ],
-            "buildOptions": {
+          "imports": [ "dnxcore50" ],
+          "buildOptions": {
                 "define": [ "CORECLR", "PORTABLE" ],
                 "compile": {
                     "exclude": [
@@ -181,7 +181,7 @@
                 "System.Net.NetworkInformation": "4.3.0",
                 "System.Reflection.Emit": "4.3.0",
                 "System.Reflection.Emit.Lightweight": "4.3.0",
-                "System.Reflection.Metadata": "1.4.2",
+                "System.Reflection.Metadata": "1.4.1",
                 "System.Security.AccessControl": "4.3.0",
                 "System.Security.Cryptography.Algorithms": "4.3.0",
                 "System.Security.Cryptography.X509Certificates": "4.3.0",
@@ -195,7 +195,7 @@
         "net451": {
             "buildOptions": {
                 "compile": {
-                    "exclude": [ "gen/CoreClrStubResources.cs" ]
+                  "exclude": [ "gen/CoreClrStubResources.cs" ]
                 },
                 "embed": {
                     "exclude": [ "resources/CoreClrStubResources.resx" ]
@@ -207,13 +207,13 @@
                 "System.Xml": "",
                 "System.Xml.Linq": "",
                 "System.Numerics": "",
-                "System.Data": "",
+              "System.Data": "",
                 "System.DirectoryServices": "",
                 "System.Security": "",
                 "System.Transactions": "",
                 "System.Runtime.Serialization": "",
                 "System.Management": "",
-                "System.Configuration": "",
+              "System.Configuration": "",
                 "System.Configuration.Install": ""
             }
         }

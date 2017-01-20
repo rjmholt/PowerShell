@@ -7,14 +7,14 @@ static class Helper
 }
 
 [Keyword(Body = DynamicKeywordBodyMode.ScripBlock)]
-class SimpleSemanticKeyword : Keyword
+public class SimpleSemanticKeyword : Keyword
 {
     public SimpleSemanticKeyword()
     {
     }
 
     [Keyword()]
-    class SimplePreParseKeyword : Keyword
+    public class SimplePreParseKeyword : Keyword
     {
         public SimplePreParseKeyword()
         {
@@ -26,7 +26,7 @@ class SimpleSemanticKeyword : Keyword
     }
 
     [Keyword()]
-    class SimplePostParseKeyword : Keyword
+    public class SimplePostParseKeyword : Keyword
     {
         public SimplePostParseKeyword()
         {
@@ -38,7 +38,7 @@ class SimpleSemanticKeyword : Keyword
     }
 
     [Keyword()]
-    class SimpleSemanticCheckKeyword : Keyword
+    public class SimpleSemanticCheckKeyword : Keyword
     {
         public SimpleSemanticCheckKeyword()
         {
@@ -51,7 +51,7 @@ class SimpleSemanticKeyword : Keyword
 }
 
 [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
-class AstManipulationSemanticKeyword : Keyword
+public class AstManipulationSemanticKeyword : Keyword
 {
     public AstManipulationSemanticKeyword()
     {
@@ -60,7 +60,7 @@ class AstManipulationSemanticKeyword : Keyword
     // This keyword actually just manipulates the DynamicKeyword data structure,
     // rather than the AST
     [Keyword()]
-    class AstManipulationPreParseKeyword : Keyword
+    public class AstManipulationPreParseKeyword : Keyword
     {
         public AstManipulationPreParseKeyword()
         {
@@ -76,7 +76,7 @@ class AstManipulationSemanticKeyword : Keyword
     }
 
     [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
-    class AstManipulationPostParseKeyword : Keyword
+    public class AstManipulationPostParseKeyword : Keyword
     {
         public AstManipulationPostParseKeyword()
         {
@@ -103,7 +103,7 @@ class AstManipulationSemanticKeyword : Keyword
     }
 
     [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
-    class AstManipulationSemanticCheckKeyword
+    public class AstManipulationSemanticCheckKeyword
     {
         public AstManipulationSemanticCheckKeyword()
         {

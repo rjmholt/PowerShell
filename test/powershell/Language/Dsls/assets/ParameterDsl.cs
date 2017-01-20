@@ -1,6 +1,6 @@
-using System.Management.Automation;
+using System.Management.Automation.Language;
 
-enum KeywordParameterType
+public enum KeywordParameterType
 {
     Type1,
     Type2,
@@ -18,37 +18,37 @@ public class ParameterKeyword : Keyword
     }
 
     [KeywordParameter()]
-    string NamedParameter
+    public string NamedParameter
     {
         get; set;
     }
 
     [KeywordParameter(Position = 0)]
-    string PositionalParameter
+    public string PositionalParameter
     {
         get; set;
     }
 
     [KeywordParameter(Mandatory = true)]
-    string MandatoryNamedParamter
+    public string MandatoryNamedParamter
     {
         get; set;
     }
 
     [KeywordParameter(Position = 1, Mandatory = true)]
-    string MandatoryPositionalParameter
+    public string MandatoryPositionalParameter
     {
         get; set;
     }
 
     [KeywordParameter()]
-    int IntParameter
+    public int IntParameter
     {
         get; set;
     }
 
     [KeywordParameter()]
-    KeywordParameterType CustomTypeParameter
+    public KeywordParameterType CustomTypeParameter
     {
         get; set;
     }

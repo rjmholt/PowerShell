@@ -1,21 +1,21 @@
 using System.Management.Automation.Language;
 
 [Keyword(Use = DynamicKeywordUseMode.Required)]
-class RequiredUseKeyword : Keyword
+public class classRequiredUseKeyword : Keyword
 {
 }
 
 [Keyword(Use = DynamicKeywordUseMode.Optional)]
-class OptionalUseKeyword : Keyword
+public class classOptionalUseKeyword : Keyword
 {
 }
 
 [Keyword(Use = DynamicKeywordUseMode.RequiredMany)]
-class RequiredManyUseKeyword : Keyword
+public class classRequiredManyUseKeyword : Keyword
 {
 }
 
 [Keyword(Use = DynamicKeywordUseMode.OptionalMany)]
-class OptionalManyUseKeyword : Keyword
+public class classOptionalManyUseKeyword : Keyword
 {
 }

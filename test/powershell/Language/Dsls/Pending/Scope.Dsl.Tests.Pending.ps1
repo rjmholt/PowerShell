@@ -1,6 +1,7 @@
 <#
 Tests scoping in DynamicKeyword contexts
 #>
+Import-Module $PSScriptRoot\DslTestSupport.psm1
 
 Describe "DynamicKeyword scoping rules" -Tags "CI" {
     Context "has nested keywords" {

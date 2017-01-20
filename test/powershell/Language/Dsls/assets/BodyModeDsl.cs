@@ -1,16 +1,16 @@
 using System.Management.Automation.Language;
 
 [Keyword(Body = DynamicKeywordBodyMode.Command)]
-class CommandBodyKeyword : Keyword
+public class CommandBodyKeyword : Keyword
 {
 }
 
 [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
-class ScriptBlockBodyKeyword : Keyword
+public class ScriptBlockBodyKeyword : Keyword
 {
 }
 
 [Keyword(Body = DynamicKeywordBodyMode.Hashtable)]
-class HashtableBodyKeyword : Keyword
+public class HashtableBodyKeyword : Keyword
 {
 }

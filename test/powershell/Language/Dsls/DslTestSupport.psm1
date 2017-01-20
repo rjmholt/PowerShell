@@ -23,7 +23,7 @@ function New-TestDllModule
     )
     #>
 
-    Add-Type -Path $csSourcePath -OutputAssembly $dllPath -Ref $references
+    Add-Type -Path $csSourcePath -OutputAssembly $dllPath #-Ref $references
 }
 
 function Get-TestDrivePathString
@@ -38,7 +38,7 @@ function New-ModuleTestContext
     param([string] $TestDrive, [string] $ModuleName, [ref] $EnvTempVar)
 
     $EnvTempVar = $env:PSModulePath
-    $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
+    $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
 
     New-TestDllModule -TestDrive $TestDrive -ModuleName $ModuleName
 

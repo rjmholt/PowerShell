@@ -2,6 +2,8 @@
 Copyright (c) Microsoft Corporation.  All rights reserved.
 --********************************************************************/
 
+using Microsoft.PowerShell.Commands;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
@@ -12,12 +14,12 @@ using System.Reflection.PortableExecutable;
 using System.Collections.Immutable;
 using System.Text;
 
-// TODO:
-//   - Check ParseError errorId strings
-//   - Check ParseError Extents
-
 namespace System.Management.Automation.Language
 {
+    // TODO:
+    //   - Check ParseError errorId strings
+    //   - Check ParseError Extents
+
     /// <summary>
     /// Specifies the semantic properties/actions that a
     /// DSL keyword must provide to the PowerShell runtime. This must
@@ -25,6 +27,9 @@ namespace System.Management.Automation.Language
     /// </summary>
     public abstract class Keyword
     {
+        /// <summary>
+        /// Create a fresh empty instance of a keyword
+        /// </summary>
         protected Keyword()
         {
             PreParse = null;
@@ -32,16 +37,28 @@ namespace System.Management.Automation.Language
             SemanticCheck = null;
         }
 
+        /// <summary>
+        /// Specifies the action to execute before the parser hits
+        /// the body of a keyword
+        /// </summary>
         public virtual Func<DynamicKeyword, ParseError[]> PreParse
         {
             get;
         }
 
+        /// <summary>
+        /// Specifies the action to execute after the parser
+        /// has processed the body of a keyword
+        /// </summary>
         public virtual Func<DynamicKeywordStatementAst, ParseError[]> PostParse
         {
             get;
         }
 
+        /// <summary>
+        /// Specifies the specific semantic checking to validate a keyword
+        /// invocation after parsing
+        /// </summary>
         public virtual Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
         {
             get;
@@ -52,7 +69,7 @@ namespace System.Management.Automation.Language
         /// so that keyword implementors do not need to always reimplement most likely
         /// functionality.
         /// </summary>
-        /// <param name="kwStmtAst">dynamic keyword statement ast node</param>
+        /// <param name="kwAst">dynamic keyword statement ast node</param>
         /// <returns></returns>
         protected virtual ParseError[] ResolveParameters(DynamicKeywordStatementAst kwAst)
         {
@@ -224,7 +241,7 @@ namespace System.Management.Automation.Language
             }
             catch (InvalidOperationException e)
             {
-                errorList.Add(new ParseError(boundValue.Value.Extent, "UnsafeValue", "The value " + boundValue.Value.ToString() + " could not be parsed"));
+                errorList.Add(new ParseError(boundValue.Value.Extent, e.GetType().ToString(), e.Message));
                 return false;
             }
 
@@ -252,19 +269,29 @@ namespace System.Management.Automation.Language
         private DynamicKeywordBodyMode bodyMode;
         private DynamicKeywordUseMode useMode;
 
+        /// <summary>
+        /// Construct a KeywordAttribute with default options set
+        /// </summary>
         public KeywordAttribute()
         {
             this.bodyMode = DynamicKeywordBodyMode.Command;
             this.useMode = DynamicKeywordUseMode.OptionalMany;
         }
 
-        public virtual DynamicKeywordBodyMode Body
+        /// <summary>
+        /// Specifies the body syntax expected after a keyword
+        /// </summary>
+        public DynamicKeywordBodyMode Body
         {
             get { return bodyMode; }
             set { bodyMode = value; }
         }
 
-        public virtual DynamicKeywordUseMode Use
+        /// <summary>
+        /// Specifies the number of times a keyword may be used
+        /// in a scope/block
+        /// </summary>
+        public DynamicKeywordUseMode Use
         {
             get { return useMode; }
             set { useMode = value;}
@@ -280,9 +307,12 @@ namespace System.Management.Automation.Language
         private bool mandatory;
         private int position;
 
+        /// <summary>
+        /// Constructs a KeywordParamterAttribute with default options set
+        /// </summary>
         public KeywordParameterAttribute()
         {
-            this.mandatory = true;
+            this.mandatory = false;
             this.position = -1;
         }
 
@@ -304,6 +334,33 @@ namespace System.Management.Automation.Language
         {
             get { return position; }
             set { position = value; }
+        }
+    }
+
+    /// <summary>
+    /// Denotes a property for a keyword specification. Currently this
+    /// would be a key in a hashmap body
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    public class KeywordPropertyAttribute : System.Attribute
+    {
+        private bool mandatory;
+
+        /// <summary>
+        /// Constructs a KeywordPropertyAttribute with the default options set
+        /// </summary>
+        public KeywordPropertyAttribute()
+        {
+            mandatory = false;
+        }
+        
+        /// <summary>
+        /// Specifies whether a property must be given for the keyword
+        /// </summary>
+        public bool Mandatory
+        {
+            get { return mandatory; }
+            set { mandatory = value; }
         }
     }
 
@@ -491,6 +548,12 @@ namespace System.Management.Automation.Language
         /// </summary>
         private class CustomAttributeTypeProvider : ICustomAttributeTypeProvider<Type>
         {
+            /// <summary>
+            /// Get the Type representation corresponding to a primitive type code.
+            /// TypedReferences are not supported in dotnetCore and will fail
+            /// </summary>
+            /// <param name="typeCode">the cil metadata type code of the value</param>
+            /// <returns>a C# type corresponding to the given type code</returns>
             public Type GetPrimitiveType(PrimitiveTypeCode typeCode)
             {
                 switch (typeCode)
@@ -532,7 +595,7 @@ namespace System.Management.Automation.Language
                         return typeof(string);
 
                     case PrimitiveTypeCode.TypedReference:
-                        return typeof(TypedReference);
+                        throw new NotImplementedException("TypedReference not supported in dotnetCore");
 
                     case PrimitiveTypeCode.UInt16:
                         return typeof(ushort);
@@ -554,16 +617,31 @@ namespace System.Management.Automation.Language
                 }
             }
 
+            /// <summary>
+            /// Get the Type representation of System.Type
+            /// </summary>
+            /// <returns></returns>
             public Type GetSystemType()
             {
                 return typeof(Type);
             }
 
+            /// <summary>
+            /// </summary>
+            /// <param name="elementType"></param>
+            /// <returns></returns>
             public Type GetSZArrayType(Type elementType)
             {
                 return Type.GetType(elementType.ToString() + "[]");
             }
 
+            /// <summary>
+            /// 
+            /// </summary>
+            /// <param name="reader"></param>
+            /// <param name="handle"></param>
+            /// <param name="rawTypeKind"></param>
+            /// <returns></returns>
             public Type GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind=0)
             {
                 TypeDefinition typeDef = reader.GetTypeDefinition(handle);
@@ -583,6 +661,13 @@ namespace System.Management.Automation.Language
                 return Type.GetType(Assembly.CreateQualifiedName(typeDefNamespace, typeDefName));
             }
 
+            /// <summary>
+            /// 
+            /// </summary>
+            /// <param name="reader"></param>
+            /// <param name="handle"></param>
+            /// <param name="rawTypeKind"></param>
+            /// <returns></returns>
             public Type GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind=0)
             {
                 TypeReference typeRef = reader.GetTypeReference(handle);
@@ -595,11 +680,21 @@ namespace System.Management.Automation.Language
                 return Type.GetType(Assembly.CreateQualifiedName(typeRefNamespace, typeRefName));
             }
 
+            /// <summary>
+            /// 
+            /// </summary>
+            /// <param name="name"></param>
+            /// <returns></returns>
             public Type GetTypeFromSerializedName(string name)
             {
                 return Type.GetType(name);
             }
 
+            /// <summary>
+            /// 
+            /// </summary>
+            /// <param name="type"></param>
+            /// <returns></returns>
             public PrimitiveTypeCode GetUnderlyingEnumType(Type type)
             {
                 if (type == typeof(DynamicKeywordBodyMode) || type == typeof(DynamicKeywordUseMode))
@@ -610,6 +705,11 @@ namespace System.Management.Automation.Language
                 throw new ArgumentOutOfRangeException("Not a known parameter enum type");
             }
 
+            /// <summary>
+            /// 
+            /// </summary>
+            /// <param name="type"></param>
+            /// <returns></returns>
             public bool IsSystemType(Type type)
             {
                 return type == typeof(Type);

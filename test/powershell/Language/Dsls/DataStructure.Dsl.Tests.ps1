@@ -2,14 +2,14 @@
 Tests the creation of DynamicKeyword datastructures
 #>
 
-using module $PSScriptRoot\DslTestSupport.psm1
+Import-Module $PSScriptRoot\DslTestSupport.psm1
 
 # Picks out a top level keyword by name, provided it is imported into the given context
 function Get-TopLevelKeywordInContext
 {
     param([powershell] $Context, [string] $KeywordName)
 
-    $Context.AddScript("[System.Management.Automation.Language.DynamicKeyword]::GetKeyword($KeywordName)").Invoke()
+    $Context.AddScript("[System.Management.Automation.Language.DynamicKeyword]::GetKeyword('$KeywordName')").Invoke()
 }
 
 # Descends the keyword namespace tree to get the object representing the last DynamicKeyword in the list
@@ -20,6 +20,10 @@ function Get-InnerKeyword
     $curr = $TopKw
     foreach ($name in $NestedNames)
     {
+        if ($curr -eq $null)
+        {
+            return $null
+        }
         $curr = $curr.GetInnerKeyword($name)
     }
 
@@ -29,7 +33,7 @@ function Get-InnerKeyword
 Describe "Basic DSL addition to runtime namespace" -Tags "CI" {
     BeforeAll {
         $savedModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
+        $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
 
         $dslName = "BasicDsl"
 
@@ -39,7 +43,10 @@ Describe "Basic DSL addition to runtime namespace" -Tags "CI" {
     }
 
     AfterAll {
-        $context.Dispose()
+        if ($context -ne $null)
+        {
+            $context.Dispose()
+        }
         $env:PSModulePath = $savedModulePath
     }
 
@@ -81,13 +88,16 @@ Describe "Adding syntax modes to the DynamicKeyword datastructure" -Tags "CI" {
 
     BeforeAll {
         $savedModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
+        $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
 
         $context = [powershell]::Create()
     }
 
     AfterAll {
-        $context.Dispose()
+        if ($context -ne $null)
+        {
+            $context.Dispose()
+        }
         $env:PSModulePath = $savedModulePath
     }
 
@@ -96,6 +106,8 @@ Describe "Adding syntax modes to the DynamicKeyword datastructure" -Tags "CI" {
     }
 
     It "sets <mode> to <expected> when specification is <condition>" -TestCases $testCases {
+        param($mode, $expected, $condition, $dsl, $keyword)
+
         New-TestDllModule -TestDrive $TestDrive -ModuleName $dsl
         $context.AddScript("using module $dsl").Invoke()
         $kw = Get-TopLevelKeywordInContext -Context $context -KeywordName $keyword
@@ -130,12 +142,12 @@ Describe "Adding parameters to DynamicKeyword datastructures" -Tags "CI" {
 
     BeforeAll {
         $savedModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
+        $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
 
         $moduleName = "ParameterDsl"
         $keywordName = "ParameterKeyword"
 
-        New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
+        New-TestDllModule -TestDrive $TestDrive -ModuleName $moduleName
 
         $context = [powershell]::Create()
         $context.AddScript("using module $moduleName").Invoke()
@@ -143,11 +155,16 @@ Describe "Adding parameters to DynamicKeyword datastructures" -Tags "CI" {
     }
 
     AfterAll {
-        $context.Dispose()
+        if ($context -ne $null)
+        {
+            $context.Dispose()
+        }
         $env:PSModulePath = $savedModulePath
     }
 
     It "adds parameter <name> with type <type>" -TestCases $testCases {
+        param($name, $type, $position, $mandatory)
+
         $kw.Parameters.$name.TypeConstraint | Should Be $type
     }
 
@@ -175,7 +192,7 @@ Describe "Adding nested keywords to a DynamicKeyword" -Tags "CI" {
 
     BeforeAll {
         $savedModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
+        $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
 
         $dslName = "NestedDsl"
 
@@ -187,11 +204,16 @@ Describe "Adding nested keywords to a DynamicKeyword" -Tags "CI" {
     }
 
     AfterAll {
+        if ($context -ne $null)
+        {
+            $context.Dispose()
+        }
         $env:PSModulePath = $savedModulePath
-        $nestedContext.Dispose()
     }
 
     It "finds the inner keyword <keywordToFind> under the according path" -TestCases $testCases {
+        param($keywordToFind, $pathToKeyword)
+
         $innerKw = Get-InnerKeyword -TopKw $topKw -NestedNames $($pathToKeyword + $keywordToFind)
         $innerKw.Keyword | Should Be $keywordToFind
     }
@@ -201,15 +223,15 @@ Describe "Adding PreParse, PostParse and SemanticCheck to a DynamicKeyword datas
 
     BeforeAll {
         $savedModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
+        $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
 
         $dslName = "SemanticDsl"
         $keywordName = "SemanticKeyword"
 
         New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
 
-        $semanticContext = [powershell]::Create()
-        $semanticContext.AddScript("using module $dslName").Invoke()
+        $context = [powershell]::Create()
+        $context.AddScript("using module $dslName").Invoke()
 
         $kw = Get-InnerKeyword -Context $semanticContext -TopLevelKeywordName $dslName -NestedNames @($keywordName)
     }

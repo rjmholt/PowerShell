@@ -1,7 +1,7 @@
 <#
 Tests DynamicKeyword addition to AST structure
 #>
-using module $PSScriptRoot\DslTestSupport.psm1
+Import-Module $PSScriptRoot\DslTestSupport.psm1
 
 # Get the first instance of a DynamicKeyword of a given name within some AST
 function Get-KeywordByName
@@ -30,7 +30,7 @@ Describe "Basic DSL syntax loading into AST" -Tags "CI" {
         $dslName = "BasicDsl"
 
         $savedModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
+        $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
 
         New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
     }
@@ -63,7 +63,7 @@ Describe "More complex nested keyword structure loading into AST" -Tags "CI" {
         $dslName = "NestedDsl"
 
         $savedModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
+        $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
 
         New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
 
@@ -101,6 +101,8 @@ $dslName
     }
 
     It "contains <keywordToFind> under the top level keyword" -TestCases $testCases {
+        param($keywordToFind, $pathToKeyword)
+
         $kw = Get-ChildKeywordByNamePath -Ast $ast -NamePath $($pathToKeyword + $keywordToFind)
         $kw.Keyword.Keyword | Should Be $keywordToFind
     }
@@ -109,14 +111,14 @@ $dslName
 Describe "DSL Body most AST parsing" {
     $testCases = @(
         @{ keyword = "HashtableBodyKeyword"; script = "{0} {{ x = 1 }}"; bodyType = "Hashtable" },
-        @{ keyword = "ScriptBlockBodyKeyword"; script = "{0} {{ foo }}"; bodyType = "ScriptBlockiExpression" },
+        @{ keyword = "ScriptBlockBodyKeyword"; script = "{0} {{ foo }}"; bodyType = "ScriptBlockiExpression" }
     )
 
     BeforeAll {
         $dslName = "BodyModeDsl"
 
         $savedModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-SystemPathString -TestDrive $TestDrive
+        $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
 
         New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
     }
@@ -126,6 +128,8 @@ Describe "DSL Body most AST parsing" {
     }
 
     It "has a body AST of type <bodyType> as a child AST" -TestCases $testCases {
+        param($keyword, $bodyType)
+
         $ast = [scriptblock]::Create($script -f $keyword).Ast
 
         $kwStmt = Get-KeywordByName -Ast $ast -Name $keyword

@@ -1,27 +1,27 @@
 using System.Management.Automation.Language;
 
 [Keyword(Body = KeywordBodyMode.ScriptBlock)]
-class ScopedTypeKeyword : Keyword
+public class ScopedTypeKeyword : Keyword
 {
     public ScopedTypeKeyword()
     {
     }
 
-    enum ScopedParameterType
+    public enum ScopedParameterType
     {
         Type1,
         Type2
     }
 
     [Keyword()]
-    class InnerScopedTypeKeyword : Keyword
+    public class InnerScopedTypeKeyword : Keyword
     {
         public InnerScopedTypeKeyword()
         {
         }
 
         [KeywordParameter()]
-        ScopedParameterType InnerScopedParameter
+        public ScopedParameterType InnerScopedParameter
         {
             get;
             set;
