@@ -71,15 +71,15 @@ Describe "Adding syntax modes to the DynamicKeyword datastructure" -Tags "CI" {
         @{ mode = "UseMode"; expected = "OptionalMany"; condition = "default"; dsl = "BasicDsl"; keyword = "BasicDsl" },
 
         # BodyMode settings
-        @{ mode = "BodyMode"; expected = "Command"; condition = "DynamicKeywordBodyMode.Command"; dsl = "BodyModeDsl"; keyword = "CommandKeyword" },
-        @{ mode = "BodyMode"; expected = "ScriptBlock"; condition = "DynamicKeywordBodyMode.ScriptBlock"; dsl = "BodyModeDsl"; keyword = "ScriptBlockKeyword" }
-        @{ mode = "BodyMode"; expected = "Hashtable"; condition = "DynamicKeywordBodyMode.Hashtable"; dsl = "BodyModeDsl"; keyword = "HashtableKeyword" },
+        @{ mode = "BodyMode"; expected = "Command"; condition = "DynamicKeywordBodyMode.Command"; dsl = "BodyModeDsl"; keyword = "CommandBodyKeyword" },
+        @{ mode = "BodyMode"; expected = "ScriptBlock"; condition = "DynamicKeywordBodyMode.ScriptBlock"; dsl = "BodyModeDsl"; keyword = "ScriptBlockBodyKeyword" }
+        @{ mode = "BodyMode"; expected = "Hashtable"; condition = "DynamicKeywordBodyMode.Hashtable"; dsl = "BodyModeDsl"; keyword = "HashtableBodyKeyword" },
 
         # UseMode settings
-        @{ mode = "UseMode"; expected = "Optional"; condition = "DynamicKeywordUseMode.Optional"; dsl = "UseModeDsl"; keyword = "OptionalKeyword" },
-        @{ mode = "UseMode"; expected = "OptionalMany"; condition = "DynamicKeywordUseMode.OptionalMany"; dsl = "UseModeDsl"; keyword = "OptionalManyKeyword" },
-        @{ mode = "UseMode"; expected = "Required"; condition = "DynamicKeywordUseMode.Required"; dsl = "UseModeDsl"; keyword = "RequiredKeyword" },
-        @{ mode = "UseMode"; expected = "RequiredMany"; condition = "DynamicKeywordUseMode.RequiredMany"; dsl = "UseModeDsl"; keyword = "RequiredManyKeyword" },
+        @{ mode = "UseMode"; expected = "Optional"; condition = "DynamicKeywordUseMode.Optional"; dsl = "UseModeDsl"; keyword = "OptionalUseKeyword" },
+        @{ mode = "UseMode"; expected = "OptionalMany"; condition = "DynamicKeywordUseMode.OptionalMany"; dsl = "UseModeDsl"; keyword = "OptionalManyUseKeyword" },
+        @{ mode = "UseMode"; expected = "Required"; condition = "DynamicKeywordUseMode.Required"; dsl = "UseModeDsl"; keyword = "RequiredUseKeyword" },
+        @{ mode = "UseMode"; expected = "RequiredMany"; condition = "DynamicKeywordUseMode.RequiredMany"; dsl = "UseModeDsl"; keyword = "RequiredManyUseKeyword" },
 
         # Mixed mode settings
         @{ mode = "BodyMode"; expected = "ScriptBlock"; condition = "DynamicKeywordBodyMode.ScriptBlock"; dsl = "MixedModeDsl"; keyword = "MixedModeKeyword" },

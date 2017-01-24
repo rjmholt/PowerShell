@@ -1,10 +1,12 @@
+using System;
+using System.Collections;
 using System.Management.Automation.Language;
 
 static class Helper
 {
     private static ScriptPosition s_emptyPosition;
     private static IScriptExtent s_emptyExtent;
-    public static IScriptPosition EmptyPosition
+    public static ScriptPosition EmptyPosition
     {
         get
         {

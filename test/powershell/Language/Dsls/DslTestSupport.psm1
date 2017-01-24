@@ -16,14 +16,14 @@ function New-TestDllModule
     }
     $csSourcePath = Join-Path (Join-Path $PSScriptRoot "assets") "$ModuleName.cs"
 
-    <#
     $references = @(
         "System.Management.Automation",
-        "System.Management.Automation.Language"
+        "System.Management.Automation.Language",
+        "System",
+        "System.Collection"
     )
-    #>
 
-    Add-Type -Path $csSourcePath -OutputAssembly $dllPath #-Ref $references
+    Add-Type -Path $csSourcePath -OutputAssembly $dllPath # -ReferencedAssemblies $references
 }
 
 function Get-TestDrivePathString

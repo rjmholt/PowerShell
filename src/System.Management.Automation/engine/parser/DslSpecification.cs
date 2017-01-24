@@ -419,15 +419,25 @@ namespace System.Management.Automation.Language
             }
         }
 
-        private TypingTypeProvider DslReaderTypeProvider
+        private TypingTypeProvider TypeLookupProvider
         {
             get
             {
-                return s_dslReaderTypeProvider ??
-                    (s_dslReaderTypeProvider = new TypingTypeProvider());
+                return s_typeLookupProvider ??
+                    (s_typeLookupProvider = new TypingTypeProvider());
             }
         }
-        private static TypingTypeProvider s_dslReaderTypeProvider;
+        private static TypingTypeProvider s_typeLookupProvider;
+
+        private TypeNameTypeProvider TypeNameProvider
+        {
+            get
+            {
+                return s_typeNameProvider ??
+                    (s_typeNameProvider = new TypeNameTypeProvider());
+            }
+        }
+        private static TypeNameTypeProvider s_typeNameProvider;
 
         /// <summary>
         /// Reads the top level dynamic keywords in a DLL using the metadata
@@ -462,10 +472,13 @@ namespace System.Management.Automation.Language
         private DynamicKeyword ReadKeywordSpecification(TypeDefinition typeDef)
         {
             var genericTypeParameters = typeDef.GetGenericParameters()
-                .Select(h => Type.GetType(_metadataReader.GetString(_metadataReader.GetGenericParameter(h).Name))).ToImmutableArray();
+                .Select(h => _metadataReader.GetString(_metadataReader.GetGenericParameter(h).Name)).ToImmutableArray();
 
-            // Read in all parameters defined as class properties
+            var genericContext = new TypeNameGenericContext(genericTypeParameters, ImmutableArray<string>.Empty);
+
+            // Read in all parameters and properties defined as class properties
             var keywordParameters = new List<DynamicKeywordParameter>();
+            var keywordProperties = new List<DynamicKeywordProperty>();
             foreach (var propertyHandle in typeDef.GetProperties())
             {
                 var property = _metadataReader.GetPropertyDefinition(propertyHandle);
@@ -474,7 +487,12 @@ namespace System.Management.Automation.Language
                     var keywordParameterAttribute = _metadataReader.GetCustomAttribute(attributeHandle);
                     if (IsKeywordParameterAttribute(keywordParameterAttribute))
                     {
-                        keywordParameters.Add(ReadParameterSpecification(property, keywordParameterAttribute));
+                        keywordParameters.Add(ReadParameterSpecification(genericContext, property, keywordParameterAttribute));
+                        break;
+                    }
+                    else if (IsKeywordPropertyAttribute(keywordParameterAttribute))
+                    {
+                        keywordProperties.Add(ReadPropertySpecification(genericContext, property, keywordParameterAttribute));
                         break;
                     }
                 }
@@ -514,6 +532,10 @@ namespace System.Management.Automation.Language
             {
                 keyword.Parameters.Add(keywordParameter.Name, keywordParameter);
             }
+            foreach (var innerKeyword in innerKeywords)
+            {
+                keyword.InnerKeywords.Add(innerKeyword.Keyword, innerKeyword);
+            }
 
             return keyword;
         }
@@ -523,19 +545,30 @@ namespace System.Management.Automation.Language
             return IsAttributeOfType(keywordParameterAttribute, typeof(KeywordParameterAttribute));
         }
 
+        private bool IsKeywordPropertyAttribute(CustomAttribute keywordPropertyAttribute)
+        {
+            return IsAttributeOfType(keywordPropertyAttribute, typeof(KeywordPropertyAttribute));
+        }
+
+        private bool IsKeywordAttribute(CustomAttribute keywordAttribute)
+        {
+            return IsAttributeOfType(keywordAttribute, typeof(KeywordAttribute));
+        }
+
         /// <summary>
         /// Read in the specification for a parameter for a DynamicKeyword. This involves recording the name and type of the
         /// corresponding property, as well as reading in position/mandatory properties from the KeywordParameter attribute.
         /// </summary>
         /// <param name="property">the property representing the DynamicKeyword parameter</param>
         /// <param name="keywordParameterAttribute">the attribute on the property declaring the parameter's properties (position, mandatory)</param>
+        /// <param name="genericContext">the generic type context in which the property is used</param>
         /// <returns></returns>
-        private DynamicKeywordParameter ReadParameterSpecification(PropertyDefinition property, CustomAttribute keywordParameterAttribute)
+        private DynamicKeywordParameter ReadParameterSpecification(TypeNameGenericContext genericContext, PropertyDefinition property, CustomAttribute keywordParameterAttribute)
         {
             string parameterName = _metadataReader.GetString(property.Name);
-            string parameterType = property.DecodeSignature(DslReaderTypeProvider, null).ReturnType.ToString();
+            string parameterType = property.DecodeSignature(TypeNameProvider, genericContext).ReturnType.ToString();
 
-            CustomAttributeValue<Type> paramAttrValue = keywordParameterAttribute.DecodeValue(DslReaderTypeProvider);
+            CustomAttributeValue<Type> paramAttrValue = keywordParameterAttribute.DecodeValue(TypeLookupProvider);
             int position = -1;
             bool mandatory = false;
             foreach (var paramProperty in paramAttrValue.NamedArguments)
@@ -557,13 +590,33 @@ namespace System.Management.Automation.Language
                 Name = parameterName,
                 TypeConstraint = parameterType,
                 Position = position,
-                Mandatory = mandatory
+                Mandatory = mandatory,
             };
         }
 
-        private bool IsKeywordAttribute(CustomAttribute keywordAttribute)
+        private DynamicKeywordProperty ReadPropertySpecification(TypeNameGenericContext genericContext, PropertyDefinition property, CustomAttribute keywordPropertyAttribute)
         {
-            return IsAttributeOfType(keywordAttribute, typeof(KeywordAttribute));
+            string propertyName = _metadataReader.GetString(property.Name);
+            string propertyType = property.DecodeSignature(TypeNameProvider, genericContext).ReturnType;
+
+            bool mandatory = false;
+            CustomAttributeValue<Type> propertyValue = keywordPropertyAttribute.DecodeValue(TypeLookupProvider);
+            foreach (var propertyProperty in propertyValue.NamedArguments)
+            {
+                switch (propertyProperty.Name)
+                {
+                    case "Mandatory":
+                        mandatory = (bool)propertyProperty.Value;
+                        break;
+                }
+            }
+
+            return new DynamicKeywordProperty()
+            {
+                Name = propertyName,
+                TypeConstraint = propertyType,
+                Mandatory = mandatory,
+            };
         }
 
         private bool IsAttributeOfType(CustomAttribute attribute, Type type)
@@ -605,24 +658,31 @@ namespace System.Management.Automation.Language
 
         private void SetKeywordAttributeParameters(CustomAttribute keywordAttribute, out DynamicKeywordBodyMode bodyMode, out DynamicKeywordUseMode useMode)
         {
-            var keywordValue = keywordAttribute.DecodeValue(DslReaderTypeProvider);
+            var keywordValue = keywordAttribute.DecodeValue(TypeLookupProvider);
             bodyMode = DynamicKeywordBodyMode.Command;
             useMode = DynamicKeywordUseMode.OptionalMany;
 
             foreach (var attributeArgument in keywordValue.NamedArguments)
             {
-                if (attributeArgument.Type == typeof(DynamicKeywordBodyMode))
+                switch (attributeArgument.Name)
                 {
-                    bodyMode = (DynamicKeywordBodyMode)attributeArgument.Value;
-                }
-                else if (attributeArgument.Type == typeof(DynamicKeywordUseMode))
-                {
-                    useMode = (DynamicKeywordUseMode)attributeArgument.Value;
+                    case "Body":
+                        bodyMode = (DynamicKeywordBodyMode)attributeArgument.Value;
+                        break;
+                    case "Use":
+                        useMode = (DynamicKeywordUseMode)attributeArgument.Value;
+                        break;
                 }
             }
         }
 
-        private class TypingGenericContext
+        private interface IGenericContext<TType>
+        {
+            ImmutableArray<TType> TypeParameters { get; }
+            ImmutableArray<TType> MethodParameters { get; }
+        }
+
+        private struct TypingGenericContext : IGenericContext<Type>
         {
             public TypingGenericContext(ImmutableArray<Type> typeParameters, ImmutableArray<Type> methodParamters)
             {
@@ -632,6 +692,19 @@ namespace System.Management.Automation.Language
 
             public ImmutableArray<Type> MethodParameters { get; }
             public ImmutableArray<Type> TypeParameters { get; }
+        }
+
+        private struct TypeNameGenericContext : IGenericContext<string>
+        {
+            public TypeNameGenericContext(ImmutableArray<string> typeParameters, ImmutableArray<string> methodParameters)
+            {
+                MethodParameters = methodParameters;
+                TypeParameters = typeParameters;
+            }
+
+            public ImmutableArray<string> MethodParameters { get; }
+
+            public ImmutableArray<string> TypeParameters { get; }
         }
 
         /// <summary>
@@ -856,6 +929,99 @@ namespace System.Management.Automation.Language
             public bool IsSystemType(Type type)
             {
                 return type == typeof(Type);
+            }
+        }
+
+        private class TypeNameTypeProvider : ISignatureTypeProvider<string, TypeNameGenericContext>, ICustomAttributeTypeProvider<string>
+        {
+            public string GetArrayType(string elementType, ArrayShape shape)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetByReferenceType(string elementType)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetFunctionPointerType(MethodSignature<string> signature)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetGenericInstantiation(string genericType, ImmutableArray<string> typeArguments)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetGenericMethodParameter(TypeNameGenericContext genericContext, int index)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetGenericTypeParameter(TypeNameGenericContext genericContext, int index)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetModifiedType(string modifier, string unmodifiedType, bool isRequired)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetPinnedType(string elementType)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetPointerType(string elementType)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetPrimitiveType(PrimitiveTypeCode typeCode)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetSystemType()
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetSZArrayType(string elementType)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetTypeFromSerializedName(string name)
+            {
+                throw new NotImplementedException();
+            }
+
+            public string GetTypeFromSpecification(MetadataReader reader, TypeNameGenericContext genericContext, TypeSpecificationHandle handle, byte rawTypeKind)
+            {
+                throw new NotImplementedException();
+            }
+
+            public PrimitiveTypeCode GetUnderlyingEnumType(string type)
+            {
+                throw new NotImplementedException();
+            }
+
+            public bool IsSystemType(string type)
+            {
+                throw new NotImplementedException();
             }
         }
     }
