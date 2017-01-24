@@ -24,7 +24,7 @@ function Get-InnerKeyword
         {
             return $null
         }
-        $curr = $curr.GetInnerKeyword($name)
+        $curr = $curr.InnerKeyword.$name
     }
 
     $curr
@@ -111,22 +111,54 @@ Describe "Adding syntax modes to the DynamicKeyword datastructure" -Tags "CI" {
         New-TestDllModule -TestDrive $TestDrive -ModuleName $dsl
         $context.AddScript("using module $dsl").Invoke()
         $kw = Get-TopLevelKeywordInContext -Context $context -KeywordName $keyword
-        $kw.$mode | Should Be $("[DynamicKeyword$mode]::$expected")
+        $kw.$mode | Should Be $expected
     }
 }
 
-# TODO
 Describe "Adding properties to DynamicKeyword datastructures" -Tags "CI" {
+    $testCases = @(
+        @{ name = "DefaultProperty"; type = "string"; mandatory = "optional" },
+        @{ name = "MandatoryProperty"; type = "string"; mandatory = "mandatory" },
+        @{ name = "IntProperty"; type = "int"; mandatory = "optional" },
+        @{ name = "CustomTypeProperty"; type = "PropertyType"; mandatory = "optional" }
+    )
+
     BeforeAll {
+        $savedModulePath = $env:PSModulePath
+        $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
+
+        $moduleName = "PropertyDsl"
+        $keywordName = "PropertyKeyword"
+
+        New-TestDllModule -TestDrive $TestDrive -ModuleName $moduleName
+
+        $context = [powershell]::Create()
+        $context.AddScript("using module $moduleName").Invoke()
+        $kw = Get-TopLevelKeywordInContext -Context $context -KeywordName $keywordName
     }
 
-    BeforeEach {
+    AfterAll {
+        if ($context -ne $null)
+        {
+            $context.Dispose()
+        }
+
+        $env:PSModulePath = $savedModulePath
     }
 
-    AfterEach {
+    It "adds a property <name> to the keyword" -TestCases $testCases {
+        param($name, $type, $mandatory)
+        $kw.Properties.$name.Name | Should Be $name
     }
 
-    It "adds a property to the DynamicKeyword" -Pending {
+    It "adds a property <name> of type <type> to the keyword" -TestCases $testCases {
+        param($name, $type, $mandatory)
+        $kw.Properties.$name.TypeConstraint | Should Be $type
+    }
+
+    It "adds a property <name> which is <mandatory>" -TestCases $testCases {
+        param($name, $type, $mandatory)
+        $kw.Properties.$name.Mandatory | Should Be ($mandatory -eq "mandatory")
     }
 }
 
@@ -216,55 +248,6 @@ Describe "Adding nested keywords to a DynamicKeyword" -Tags "CI" {
 
         $innerKw = Get-InnerKeyword -TopKw $topKw -NestedNames $($pathToKeyword + $keywordToFind)
         $innerKw.Keyword | Should Be $keywordToFind
-    }
-}
-
-Describe "Adding PreParse, PostParse and SemanticCheck to a DynamicKeyword datastructure" {
-
-    BeforeAll {
-        $savedModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
-
-        $dslName = "SemanticDsl"
-        $keywordName = "SemanticKeyword"
-
-        New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
-
-        $context = [powershell]::Create()
-        $context.AddScript("using module $dslName").Invoke()
-
-        $kw = Get-InnerKeyword -Context $semanticContext -TopLevelKeywordName $dslName -NestedNames @($keywordName)
-    }
-
-    AfterAll {
-        $env:PSModulePath = $savedModulePath
-    }
-
-    It "adds the PreParse action to the DynamicKeyword" -Pending {
-        $kw.PreParse | Should Not Be $null
-
-        if ($kw.PreParse -ne $null)
-        {
-            # TODO: Figure out what action to put here to test the semantic action
-        }
-    }
-
-    It "adds the PostParse action to the DynamicKeyword" -Pending {
-        $kw.PostParse | Should Not Be $null
-
-        if ($kw.PostParse -ne $null)
-        {
-            # TODO: Figure out what action to put here to test the semantic action
-        }
-    }
-
-    It "adds the SemanticCheck action to the DynamicKeyword" -Pending {
-        $kw.SemanticCheck | Should Not Be $null
-
-        if ($kw.SemanticCheck -ne $null)
-        {
-            # TODO: Figure out what action to test the SemanticCheck with
-        }
     }
 }
 

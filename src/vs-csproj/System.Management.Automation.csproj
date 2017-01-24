@@ -1039,7 +1039,7 @@
       <Link>engine\parser\DebugViewWriter.cs</Link>
     </Compile>
     <Compile Include="..\System.Management.Automation\engine\parser\DslSpecification.cs">
-        <Link>engine\parser\DslSpecification.cs</Link>
+      <Link>engine\parser\DslSpecification.cs</Link>
     </Compile>
     <Compile Include="..\System.Management.Automation\engine\parser\FusionAssemblyIdentity.cs">
       <Link>engine\parser\FusionAssemblyIdentity.cs</Link>

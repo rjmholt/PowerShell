@@ -2,11 +2,27 @@ using System.Management.Automation.Language;
 
 static class Helper
 {
-    public static IScriptPosition EmptyPosition { get; } = new ScriptPosition("", 0, 0, "", "");
-    public static IScriptExtent EmptyExtent { get; } = new ScriptExtent(EmptyPosition, EmptyPosition);
+    private static ScriptPosition s_emptyPosition;
+    private static IScriptExtent s_emptyExtent;
+    public static IScriptPosition EmptyPosition
+    {
+        get
+        {
+            return s_emptyPosition ??
+                (s_emptyPosition = new ScriptPosition("", 0, 0, "", ""));
+        }
+    }
+    public static IScriptExtent EmptyExtent
+    {
+        get
+        {
+            return s_emptyExtent ??
+                (s_emptyExtent = new ScriptExtent(EmptyPosition, EmptyPosition));
+        }
+    }
 }
 
-[Keyword(Body = DynamicKeywordBodyMode.ScripBlock)]
+[Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
 public class SimpleSemanticKeyword : Keyword
 {
     public SimpleSemanticKeyword()
@@ -42,10 +58,10 @@ public class SimpleSemanticKeyword : Keyword
     {
         public SimpleSemanticCheckKeyword()
         {
-            PostParse = (dynamicKeywordStatementAst) => {
+            SemanticCheck = (dynamicKeywordStatementAst) => {
                 var error = new ParseError(Helper.EmptyExtent, "SuccessfulSemanticAction", "Successful SemanticCheck action");
                 return new [] { error };
-            }
+            };
         }
     }
 }
@@ -67,7 +83,7 @@ public class AstManipulationSemanticKeyword : Keyword
             PreParse = (dynamicKeyword) => {
                 var dkProperty = new DynamicKeywordProperty()
                 {
-                    Name = "TestKeywordProperty",
+                    Name = "TestKeywordProperty"
                 };
                 dynamicKeyword.Properties.Add(dkProperty.Name, dkProperty);
                 return null;
@@ -103,7 +119,7 @@ public class AstManipulationSemanticKeyword : Keyword
     }
 
     [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
-    public class AstManipulationSemanticCheckKeyword
+    public class AstManipulationSemanticCheckKeyword : Keyword
     {
         public AstManipulationSemanticCheckKeyword()
         {

@@ -4545,10 +4545,35 @@ namespace System.Management.Automation.Language
                 usingStmtAst = new UsingStatementAst(ExtentOf(usingToken, itemAst), htAst);
             }
 
+            // Import any DSL modules defined in DLLs for parse-time inclusion
             Exception moduleImportException;
-            bool isWildcard;
-            bool isConstant;
+            bool isWildcard; // Unused
+            bool isConstant; // Unused
             Collection<PSModuleInfo> moduleInfos = GetModulesFromUsingModule(usingStmtAst, out moduleImportException, out isWildcard, out isConstant);
+            if (moduleInfos != null)
+            {
+                foreach (var module in moduleInfos)
+                {
+                    // Try and read the module as an assembly, and ignore it if it isn't
+                    if (module.Path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            ClrFacade.GetAssemblyName(module.Path);
+                        }
+                        catch (BadImageFormatException)
+                        {
+                            continue;
+                        }
+
+                        var dslReader = new DslDllModuleMetadataReader(module);
+                        foreach (var keyword in dslReader.ReadDslSpecification())
+                        {
+                            DynamicKeyword.AddKeyword(keyword);
+                        }
+                    }
+                }
+            }
 
             return usingStmtAst;
         }

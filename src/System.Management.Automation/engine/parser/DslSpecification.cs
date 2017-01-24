@@ -41,27 +41,27 @@ namespace System.Management.Automation.Language
         /// Specifies the action to execute before the parser hits
         /// the body of a keyword
         /// </summary>
-        public virtual Func<DynamicKeyword, ParseError[]> PreParse
+        public Func<DynamicKeyword, ParseError[]> PreParse
         {
-            get;
+            get; set;
         }
 
         /// <summary>
         /// Specifies the action to execute after the parser
         /// has processed the body of a keyword
         /// </summary>
-        public virtual Func<DynamicKeywordStatementAst, ParseError[]> PostParse
+        public Func<DynamicKeywordStatementAst, ParseError[]> PostParse
         {
-            get;
+            get; set;
         }
 
         /// <summary>
         /// Specifies the specific semantic checking to validate a keyword
         /// invocation after parsing
         /// </summary>
-        public virtual Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
+        public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
         {
-            get;
+            get; set;
         }
 
         /// <summary>
@@ -376,15 +376,15 @@ namespace System.Management.Automation.Language
     /// </summary>
     internal class DslDllModuleMetadataReader
     {
-        private static CustomAttributeTypeProvider s_keywordAttributeTypeProvider;
-
         private readonly PSModuleInfo _moduleInfo;
+
+        private MetadataReader _metadataReader;
 
         /// <summary>
         /// Construct a DLL reader from a PSModuleInfo object -- assuming it contains all needed info
         /// </summary>
         /// <param name="moduleInfo">the PSModuleInfo object describing the DLL module to be parsed</param>
-        internal DslDllModuleMetadataReader(PSModuleInfo moduleInfo)
+        public DslDllModuleMetadataReader(PSModuleInfo moduleInfo)
         {
             _moduleInfo = moduleInfo;
         }
@@ -394,7 +394,7 @@ namespace System.Management.Automation.Language
         /// spits out an array of the top level keywords defined in it
         /// </summary>
         /// <returns>an array of the top level DynamicKeywords defined in the module</returns>
-        internal DynamicKeyword[] ReadDslSpecification()
+        public IEnumerable<DynamicKeyword> ReadDslSpecification()
         {
             // TODO: Ensure the module is a DLL, else return null
 
@@ -403,38 +403,53 @@ namespace System.Management.Automation.Language
             {
                 if (!peReader.HasMetadata)
                 {
-                    // TODO: Dll has no metadata, so is not a DSL definition. Return null
                     return null;
                 }
 
-                MetadataReader metadataReader = peReader.GetMetadataReader();
+                _metadataReader = peReader.GetMetadataReader();
 
-                return ReadGlobalDynamicKeywords(metadataReader);
+                try
+                {
+                    return ReadGlobalDynamicKeywords();
+                }
+                catch (Exception e)
+                {
+                    throw new RuntimeException(e.GetType().ToString() + "|" + e.Message + "|" + e.StackTrace, e);
+                }
             }
         }
+
+        private TypingTypeProvider DslReaderTypeProvider
+        {
+            get
+            {
+                return s_dslReaderTypeProvider ??
+                    (s_dslReaderTypeProvider = new TypingTypeProvider());
+            }
+        }
+        private static TypingTypeProvider s_dslReaderTypeProvider;
 
         /// <summary>
         /// Reads the top level dynamic keywords in a DLL using the metadata
         /// reader for that DLL. This constructs all nested keywords in the same DLL
         /// by recursive descent.
         /// </summary>
-        /// <param name="metadataReader">the metadata reader for the DLL module being parsed</param>
         /// <returns>an array of the top level keywords defined in the DLL</returns>
-        private DynamicKeyword[] ReadGlobalDynamicKeywords(MetadataReader metadataReader)
+        private IEnumerable<DynamicKeyword> ReadGlobalDynamicKeywords()
         {
             var globalKeywordList = new List<DynamicKeyword>();
 
-            foreach (var typeDefHandle in metadataReader.TypeDefinitions)
+            foreach (var typeDefHandle in _metadataReader.TypeDefinitions)
             {
-                var typeDef = metadataReader.GetTypeDefinition(typeDefHandle);
+                var typeDef = _metadataReader.GetTypeDefinition(typeDefHandle);
                 var declaringType = typeDef.GetDeclaringType();
                 if (declaringType.IsNil)
                 {
-                    globalKeywordList.Add(ReadKeywordSpecification(metadataReader, typeDef));
+                    globalKeywordList.Add(ReadKeywordSpecification(typeDef));
                 }
             }
 
-            return globalKeywordList.ToArray();
+            return globalKeywordList;
         }
 
         /// <summary>
@@ -442,22 +457,24 @@ namespace System.Management.Automation.Language
         /// any nested keywords below this one. Constructs all keywords nested below the current one by
         /// recursive descent.
         /// </summary>
-        /// <param name="metadataReader">the metadata reader for the DLL module being parsed</param>
         /// <param name="typeDef">the type definition object for the keyword class to be parsed</param>
         /// <returns>the constructed DynamicKeyword from the parsed specification</returns>
-        private DynamicKeyword ReadKeywordSpecification(MetadataReader metadataReader, TypeDefinition typeDef)
+        private DynamicKeyword ReadKeywordSpecification(TypeDefinition typeDef)
         {
+            var genericTypeParameters = typeDef.GetGenericParameters()
+                .Select(h => Type.GetType(_metadataReader.GetString(_metadataReader.GetGenericParameter(h).Name))).ToImmutableArray();
+
             // Read in all parameters defined as class properties
             var keywordParameters = new List<DynamicKeywordParameter>();
             foreach (var propertyHandle in typeDef.GetProperties())
             {
-                var property = metadataReader.GetPropertyDefinition(propertyHandle);
+                var property = _metadataReader.GetPropertyDefinition(propertyHandle);
                 foreach (var attributeHandle in property.GetCustomAttributes())
                 {
-                    var keywordParameterAttribute = metadataReader.GetCustomAttribute(attributeHandle);
-                    if (IsKeywordParameterAttribute(metadataReader, keywordParameterAttribute))
+                    var keywordParameterAttribute = _metadataReader.GetCustomAttribute(attributeHandle);
+                    if (IsKeywordParameterAttribute(keywordParameterAttribute))
                     {
-                        keywordParameters.Add(ReadParameterSpecification(metadataReader, property, keywordParameterAttribute));
+                        keywordParameters.Add(ReadParameterSpecification(property, keywordParameterAttribute));
                         break;
                     }
                 }
@@ -467,29 +484,31 @@ namespace System.Management.Automation.Language
             List<DynamicKeyword> innerKeywords = new List<DynamicKeyword>();
             foreach (var innerTypeHandle in typeDef.GetNestedTypes())
             {
-                var innerTypeDef = metadataReader.GetTypeDefinition(innerTypeHandle);
-                innerKeywords.Add(ReadKeywordSpecification(metadataReader, innerTypeDef));
+                var innerTypeDef = _metadataReader.GetTypeDefinition(innerTypeHandle);
+                innerKeywords.Add(ReadKeywordSpecification(innerTypeDef));
             }
 
             // Read the custom keyword properties
-            DynamicKeywordBodyMode bodyMode;
-            DynamicKeywordUseMode useMode;
+            DynamicKeywordBodyMode bodyMode = DynamicKeywordBodyMode.Command;
+            DynamicKeywordUseMode useMode = DynamicKeywordUseMode.OptionalMany;
             foreach (var keywordAttributeHandle in typeDef.GetCustomAttributes())
             {
-                var keywordAttribute = metadataReader.GetCustomAttribute(keywordAttributeHandle);
-                if (IsKeywordAttribute(metadataReader, keywordAttribute))
+                var keywordAttribute = _metadataReader.GetCustomAttribute(keywordAttributeHandle);
+                if (IsKeywordAttribute(keywordAttribute))
                 {
-                    SetKeywordAttributeParameters(metadataReader, keywordAttribute, out bodyMode, out useMode);
+                    SetKeywordAttributeParameters(keywordAttribute, out bodyMode, out useMode);
                     break;
                 }
             }
 
             // Set all the properties for the keyword itself
-            string keywordName = metadataReader.GetString(typeDef.Name);
+            string keywordName = _metadataReader.GetString(typeDef.Name);
             var keyword = new DynamicKeyword()
             {
                 ImplementingModule = _moduleInfo.Name,
                 Keyword = keywordName,
+                BodyMode = bodyMode,
+                UseMode = useMode,
             };
             foreach (var keywordParameter in keywordParameters)
             {
@@ -499,55 +518,174 @@ namespace System.Management.Automation.Language
             return keyword;
         }
 
-        private bool IsKeywordParameterAttribute(MetadataReader metadataReader, CustomAttribute keywordParameterAttribute)
+        private bool IsKeywordParameterAttribute(CustomAttribute keywordParameterAttribute)
         {
-            // TODO: Read in attribute, read the constructor's signature and verify it is of correct type
-            return false;
-        }
-
-        private DynamicKeywordParameter ReadParameterSpecification(MetadataReader metadataReader, PropertyDefinition property, CustomAttribute keywordParameterAttribute)
-        {
-            // TODO: Read in the parameter values and construct a DynamicKeywordParameter from its type
-            return null;
-        }
-
-        private bool IsKeywordAttribute(MetadataReader metadataReader, CustomAttribute keywordAttribute)
-        {
-            // TODO: Read the attribute in, check the constructor's signature and verify it is of the correct type
-            return false;
-        }
-
-        private bool IsAttributeOfType(MetadataReader metadataReader, CustomAttribute attribute, Type type)
-        {
-            // TODO: Read attribute signature to determine its type and work out what it is
-            return false;
-        }
-
-        private void SetKeywordAttributeParameters(MetadataReader metadataReader, CustomAttribute keywordAttribute, out DynamicKeywordBodyMode bodyMode, out DynamicKeywordUseMode useMode)
-        {
-            // TODO: Make this more robust
-            var keywordValue = keywordAttribute.DecodeValue(KeywordAttributeTypeProvider);
-            bodyMode = (DynamicKeywordBodyMode) keywordValue.NamedArguments.FirstOrDefault(arg => arg.Type == typeof(DynamicKeywordBodyMode)).Value;
-            useMode = (DynamicKeywordUseMode)keywordValue.NamedArguments.FirstOrDefault(arg => arg.Type == typeof(DynamicKeywordNameMode)).Value;
+            return IsAttributeOfType(keywordParameterAttribute, typeof(KeywordParameterAttribute));
         }
 
         /// <summary>
-        /// A static reference to a type provider object that provides types for custom attribute values
+        /// Read in the specification for a parameter for a DynamicKeyword. This involves recording the name and type of the
+        /// corresponding property, as well as reading in position/mandatory properties from the KeywordParameter attribute.
         /// </summary>
-        private CustomAttributeTypeProvider KeywordAttributeTypeProvider
+        /// <param name="property">the property representing the DynamicKeyword parameter</param>
+        /// <param name="keywordParameterAttribute">the attribute on the property declaring the parameter's properties (position, mandatory)</param>
+        /// <returns></returns>
+        private DynamicKeywordParameter ReadParameterSpecification(PropertyDefinition property, CustomAttribute keywordParameterAttribute)
         {
-            get
+            string parameterName = _metadataReader.GetString(property.Name);
+            string parameterType = property.DecodeSignature(DslReaderTypeProvider, null).ReturnType.ToString();
+
+            CustomAttributeValue<Type> paramAttrValue = keywordParameterAttribute.DecodeValue(DslReaderTypeProvider);
+            int position = -1;
+            bool mandatory = false;
+            foreach (var paramProperty in paramAttrValue.NamedArguments)
             {
-                return s_keywordAttributeTypeProvider ??
-                    (s_keywordAttributeTypeProvider = new CustomAttributeTypeProvider());
+                switch (paramProperty.Name)
+                {
+                    case "Position":
+                        position = (int)paramProperty.Value;
+                        break;
+
+                    case "Mandatory":
+                        mandatory = (bool)paramProperty.Value;
+                        break;
+                }
             }
+
+            return new DynamicKeywordParameter()
+            {
+                Name = parameterName,
+                TypeConstraint = parameterType,
+                Position = position,
+                Mandatory = mandatory
+            };
+        }
+
+        private bool IsKeywordAttribute(CustomAttribute keywordAttribute)
+        {
+            return IsAttributeOfType(keywordAttribute, typeof(KeywordAttribute));
+        }
+
+        private bool IsAttributeOfType(CustomAttribute attribute, Type type)
+        {
+            switch (attribute.Constructor.Kind)
+            {
+                case HandleKind.MethodDefinition:
+                    // System.Reflection.Metadata does not present the Parent of a MethodDefinition
+                    // However, this only applies when an attribute is defined in the same file as its use
+                    return false;
+
+                case HandleKind.MemberReference:
+                    MemberReference member = _metadataReader.GetMemberReference((MemberReferenceHandle)attribute.Constructor);
+                    StringHandle typeName;
+                    StringHandle typeNamespace;
+                    switch (member.Parent.Kind)
+                    {
+                        case HandleKind.TypeReference:
+                            TypeReference typeRef = _metadataReader.GetTypeReference((TypeReferenceHandle)member.Parent);
+                            typeName = typeRef.Name;
+                            typeNamespace = typeRef.Namespace;
+                            break;
+
+                        case HandleKind.TypeDefinition:
+                            TypeDefinition typeDef = _metadataReader.GetTypeDefinition((TypeDefinitionHandle)member.Parent);
+                            typeName = typeDef.Name;
+                            typeNamespace = typeDef.Namespace;
+                            break;
+
+                        default:
+                            return false;
+                    }
+                    return _metadataReader.GetString(typeName) == type.Name && _metadataReader.GetString(typeNamespace) == type.Namespace;
+
+                default:
+                    return false;
+            }
+        }
+
+        private void SetKeywordAttributeParameters(CustomAttribute keywordAttribute, out DynamicKeywordBodyMode bodyMode, out DynamicKeywordUseMode useMode)
+        {
+            var keywordValue = keywordAttribute.DecodeValue(DslReaderTypeProvider);
+            bodyMode = DynamicKeywordBodyMode.Command;
+            useMode = DynamicKeywordUseMode.OptionalMany;
+
+            foreach (var attributeArgument in keywordValue.NamedArguments)
+            {
+                if (attributeArgument.Type == typeof(DynamicKeywordBodyMode))
+                {
+                    bodyMode = (DynamicKeywordBodyMode)attributeArgument.Value;
+                }
+                else if (attributeArgument.Type == typeof(DynamicKeywordUseMode))
+                {
+                    useMode = (DynamicKeywordUseMode)attributeArgument.Value;
+                }
+            }
+        }
+
+        private class TypingGenericContext
+        {
+            public TypingGenericContext(ImmutableArray<Type> typeParameters, ImmutableArray<Type> methodParamters)
+            {
+                MethodParameters = methodParamters;
+                TypeParameters = typeParameters;
+            }
+
+            public ImmutableArray<Type> MethodParameters { get; }
+            public ImmutableArray<Type> TypeParameters { get; }
         }
 
         /// <summary>
         /// Type provider to translate the MetadataReader's decoded type into a Type
         /// </summary>
-        private class CustomAttributeTypeProvider : ICustomAttributeTypeProvider<Type>
+        private class TypingTypeProvider : ISignatureTypeProvider<Type, TypingGenericContext>, ICustomAttributeTypeProvider<Type>
         {
+            public Type GetArrayType(Type elementType, ArrayShape shape)
+            {
+                throw new NotImplementedException();
+            }
+
+            public Type GetByReferenceType(Type elementType)
+            {
+                return elementType;
+            }
+
+            public Type GetFunctionPointerType(MethodSignature<Type> signature)
+            {
+                throw new NotImplementedException();
+            }
+
+            public Type GetGenericInstantiation(Type genericType, ImmutableArray<Type> typeArguments)
+            {
+                string typeName = genericType.ToString() + "<" + String.Join(",", typeArguments.Select(t => t.ToString())) + ">";
+
+                return Type.GetType(typeName);
+            }
+
+            public Type GetGenericMethodParameter(TypingGenericContext genericContext, int index)
+            {
+                return genericContext.MethodParameters[index];
+            }
+
+            public Type GetGenericTypeParameter(TypingGenericContext genericContext, int index)
+            {
+                return genericContext.TypeParameters[index];
+            }
+
+            public Type GetModifiedType(Type modifier, Type unmodifiedType, bool isRequired)
+            {
+                return unmodifiedType;
+            }
+
+            public Type GetPinnedType(Type elementType)
+            {
+                return elementType;
+            }
+
+            public Type GetPointerType(Type elementType)
+            {
+                return elementType;
+            }
+
             /// <summary>
             /// Get the Type representation corresponding to a primitive type code.
             /// TypedReferences are not supported in dotnetCore and will fail
@@ -650,7 +788,7 @@ namespace System.Management.Automation.Language
 
                 // Check if type definition is nested
                 // This will be typeDef.Attributes.IsNested() in later releases
-                if (typeDef.Attributes.HasFlag((TypeAttributes)0x00000006))
+                if (typeDef.Attributes.HasFlag((System.Reflection.TypeAttributes)0x00000006))
                 {
                     TypeDefinitionHandle declaringTypeHandle = typeDef.GetDeclaringType();
                     Type enclosingType = GetTypeFromDefinition(reader, declaringTypeHandle);
@@ -688,6 +826,11 @@ namespace System.Management.Automation.Language
             public Type GetTypeFromSerializedName(string name)
             {
                 return Type.GetType(name);
+            }
+
+            public Type GetTypeFromSpecification(MetadataReader reader, TypingGenericContext genericContext, TypeSpecificationHandle handle, byte rawTypeKind)
+            {
+                throw new NotImplementedException();
             }
 
             /// <summary>

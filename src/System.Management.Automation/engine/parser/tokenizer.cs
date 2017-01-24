@@ -518,6 +518,12 @@ namespace System.Management.Automation.Language
         /// Type if this is a switch parameter and takes no argument
         /// </summary>
         public bool Switch { get; set; }
+
+        /// <summary>
+        /// What argument position this parameter takes if it is not specified
+        /// by name. A position of -1 indicates that it may be passed by name only
+        /// </summary>
+        public int Position { get; set; }
     }
 
     internal enum TokenizerMode
