@@ -18,8 +18,6 @@ public class PropertyKeyword : Keyword
     [KeywordProperty()]
     public int IntProperty { get; set; }
 
-    /*
     [KeywordProperty()]
     public PropertyType CustomTypeProperty { get; set; }
-    */
 }

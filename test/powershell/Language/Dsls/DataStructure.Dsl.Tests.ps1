@@ -5,62 +5,42 @@ Tests the creation of DynamicKeyword datastructures
 Import-Module $PSScriptRoot\DslTestSupport.psm1
 
 # Picks out a top level keyword by name, provided it is imported into the given context
-function Get-TopLevelKeywordInContext
+function Get-TopLevelKeywordStr
 {
-    param([powershell] $Context, [string] $KeywordName)
+    param([string] $KeywordName)
 
-    $Context.AddScript("[System.Management.Automation.Language.DynamicKeyword]::GetKeyword('$KeywordName')").Invoke()
+    "[System.Management.Automation.Language.DynamicKeyword]::GetKeyword('$KeywordName')"
 }
 
 # Descends the keyword namespace tree to get the object representing the last DynamicKeyword in the list
-function Get-InnerKeyword
+function Get-InnerKeywordStr
 {
-    param([System.Management.Automation.Language.DynamicKeyword] $TopKw, [string[]] $NestedNames)
+    param([string] $TopKw, [string[]] $NestedNames)
 
-    $curr = $TopKw
-    foreach ($name in $NestedNames)
+@"
+    `$curr = '$TopKw'
+    foreach (`$name in $($NestedNames -join ","))
     {
-        if ($curr -eq $null)
+        if (`$curr -eq `$null)
         {
-            return $null
+            return `$null
         }
-        $curr = $curr.InnerKeyword.$name
+        `$curr = `$curr.InnerKeyword.`$name
     }
 
-    $curr
+    `$curr
+"@
 }
 
 Describe "Basic DSL addition to runtime namespace" -Tags "CI" {
     BeforeAll {
-        $savedModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
-
-        $dslName = "BasicDsl"
-
-        New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
-
-        $context = [powershell]::Create()
-    }
-
-    AfterAll {
-        if ($context -ne $null)
-        {
-            $context.Dispose()
-        }
-        $env:PSModulePath = $savedModulePath
-    }
-
-    BeforeEach {
-        $context.AddScript("using module $dslName").Invoke()
-    }
-
-    AfterEach {
-        $context.Streams.ClearStreams()
+        $moduleName = "BasicDsl"
     }
 
     It "imports the top level DSL keyword into the DynamicKeyword namespace" {
-        $topLevelDslKeyword = Get-TopLevelKeywordInContext -Context $context -KeywordName $dslName
-        $topLevelDslKeyword.Keyword | Should Be $dslName
+        $expression = Get-TopLevelKeywordStr -KeywordName $moduleName
+        $kw = Get-ExpressionFromModuleInNewContext -TestDrive $TestDrive -ModuleName $moduleName -Expression $expression
+        $kw.Keyword.Value | Should Be $moduleName
     }
 }
 
@@ -86,32 +66,12 @@ Describe "Adding syntax modes to the DynamicKeyword datastructure" -Tags "CI" {
         @{ mode = "UseMode"; expected = "Required"; condition = "DynamicKeywordUseMode.Required"; dsl = "MixedModeDsl"; keyword = "MixedModeKeyword" }
     )
 
-    BeforeAll {
-        $savedModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
-
-        $context = [powershell]::Create()
-    }
-
-    AfterAll {
-        if ($context -ne $null)
-        {
-            $context.Dispose()
-        }
-        $env:PSModulePath = $savedModulePath
-    }
-
-    AfterEach {
-        $context.Streams.ClearStreams()
-    }
-
     It "sets <mode> to <expected> when specification is <condition>" -TestCases $testCases {
         param($mode, $expected, $condition, $dsl, $keyword)
 
-        New-TestDllModule -TestDrive $TestDrive -ModuleName $dsl
-        $context.AddScript("using module $dsl").Invoke()
-        $kw = Get-TopLevelKeywordInContext -Context $context -KeywordName $keyword
-        $kw.$mode | Should Be $expected
+        $expression = Get-TopLevelKeywordStr -KeywordName $keyword
+        $kw = Get-ExpressionFromModuleInNewContext -TestDrive $TestDrive -ModuleName $dsl -Expression $expression
+        $kw.$mode.Value | Should Be $expected
     }
 }
 
@@ -148,6 +108,7 @@ Describe "Adding properties to DynamicKeyword datastructures" -Tags "CI" {
 
     It "adds a property <name> to the keyword" -TestCases $testCases {
         param($name, $type, $mandatory)
+        $kw | Should Not Be $null
         $kw.Properties.$name.Name | Should Be $name
     }
 

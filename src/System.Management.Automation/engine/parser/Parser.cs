@@ -4597,6 +4597,7 @@ namespace System.Management.Automation.Language
             wildcardCharactersUsed = false;
             isConstant = true;
 
+
             // fullyQualifiedName can be string or hashtable
             object fullyQualifiedName;
             if (usingStatementAst.ModuleSpecification != null)

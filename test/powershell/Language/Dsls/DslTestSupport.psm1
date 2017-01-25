@@ -1,3 +1,14 @@
+$compileModuleFunc = "New-TestDllModule"
+
+$references = @(
+    'System.Management.Automation',
+    'System.Management.Automation.Language',
+    'System',
+    'System.Collection'
+)
+
+$assetPath = Join-Path $PSScriptRoot 'assets'
+
 function New-TestDllModule
 {
     param([string] $TestDrive, [string] $ModuleName)
@@ -14,42 +25,40 @@ function New-TestDllModule
     {
         New-Item -ItemType Directory $dllDirPath
     }
-    $csSourcePath = Join-Path (Join-Path $PSScriptRoot "assets") "$ModuleName.cs"
 
-    $references = @(
-        "System.Management.Automation",
-        "System.Management.Automation.Language",
-        "System",
-        "System.Collection"
-    )
+    $csSourcePath = Join-Path -Path $assetPath -ChildPath "$ModuleName.cs"
 
     Add-Type -Path $csSourcePath -OutputAssembly $dllPath # -ReferencedAssemblies $references
+
+    #Write-Host "Created new module $ModuleName at $dllPath" -ForegroundColor Gray
 }
 
-function Get-TestDrivePathString
+$powershellExecutable = Join-Path -Path $PSHOME -ChildPath "powershell.exe"
+
+function Get-ExpressionFromModuleInNewContext
 {
-    param([string] $TestDrive)
+    param([string] $TestDrive, [string] $ModuleName, [string[]] $Prelude, [string] $Expression)
 
-    [System.IO.Path]::PathSeparator + $TestDrive + [System.IO.Path]::DirectorySeparatorChar
-}
-
-function New-ModuleTestContext
-{
-    param([string] $TestDrive, [string] $ModuleName, [ref] $EnvTempVar)
-
-    $EnvTempVar = $env:PSModulePath
-    $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
-
+    # Let the parent set up the modules
     New-TestDllModule -TestDrive $TestDrive -ModuleName $ModuleName
 
-    $context = [powershell]::Create()
-    $context.AddScript("using module $ModuleName").Invoke()
-    $context
+    # Now tell the child to import and evaluate
+
+    $preludeDefs = $Prelude -join '`n'
+
+    $command = @"
+`$env:PSModulePath += ([System.IO.Path]::PathSeparator + '$TestDrive' + [System.IO.Path]::DirectorySeparatorChar)
+
+$preludeDefs
+
+`$sb = [scriptblock]::Create('using module $moduleName')
+`$sb.Invoke()
+
+$Expression
+"@
+
+    Write-Host $command -ForegroundColor Cyan
+
+    & $powershellExecutable -NoProfile -NonInteractive -OutputFormat XML -Command $command
 }
 
-function Remove-ModuleTestContext
-{
-    param([string] $EnvTempVar)
-
-    $env:PSModulePath = $EnvTempVar
-}

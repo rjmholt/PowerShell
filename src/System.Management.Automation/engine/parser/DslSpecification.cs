@@ -625,7 +625,7 @@ namespace System.Management.Automation.Language
             {
                 case HandleKind.MethodDefinition:
                     // System.Reflection.Metadata does not present the Parent of a MethodDefinition
-                    // However, this only applies when an attribute is defined in the same file as its use
+                    // However, this only applies when an attribute is defined in the same file that uses it
                     return false;
 
                 case HandleKind.MemberReference:
@@ -936,92 +936,257 @@ namespace System.Management.Automation.Language
         {
             public string GetArrayType(string elementType, ArrayShape shape)
             {
-                throw new NotImplementedException();
+                var builder = new StringBuilder();
+
+                builder.Append(elementType);
+                builder.Append('[');
+
+                for (int i = 0; i < shape.Rank; i++)
+                {
+                    int lowerBound = 0;
+
+                    if (i < shape.LowerBounds.Length)
+                    {
+                        lowerBound = shape.LowerBounds[i];
+                        builder.Append(lowerBound);
+                    }
+
+                    builder.Append("...");
+
+                    if (i < shape.Sizes.Length)
+                    {
+                        builder.Append(lowerBound + shape.Sizes[i] - 1);
+                    }
+
+                    if (i < shape.Rank - 1)
+                    {
+                        builder.Append(',');
+                    }
+                }
+
+                builder.Append(']');
+                return builder.ToString();
             }
 
             public string GetByReferenceType(string elementType)
             {
-                throw new NotImplementedException();
+                return elementType + "&";
             }
 
             public string GetFunctionPointerType(MethodSignature<string> signature)
             {
-                throw new NotImplementedException();
+                ImmutableArray<string> parameterTypes = signature.ParameterTypes;
+
+                int requiredParameterCount = signature.RequiredParameterCount;
+
+                var builder = new StringBuilder();
+                builder.Append("method ");
+                builder.Append(signature.ReturnType);
+                builder.Append(" *(");
+
+                int i;
+                for (i = 0; i < requiredParameterCount; i++)
+                {
+                    builder.Append(parameterTypes[i]);
+                    if (i < parameterTypes.Length - 1)
+                    {
+                        builder.Append(", ");
+                    }
+                }
+
+                if (i < parameterTypes.Length)
+                {
+                    builder.Append("..., ");
+                    for (; i < parameterTypes.Length; i++)
+                    {
+                        builder.Append(parameterTypes[i]);
+                        if (i < parameterTypes.Length - 1)
+                        {
+                            builder.Append(", ");
+                        }
+                    }
+                }
+
+                builder.Append(')');
+                return builder.ToString();
             }
 
             public string GetGenericInstantiation(string genericType, ImmutableArray<string> typeArguments)
             {
-                throw new NotImplementedException();
+                return genericType + "<" + String.Join(",", typeArguments) + ">";
             }
 
             public string GetGenericMethodParameter(TypeNameGenericContext genericContext, int index)
             {
-                throw new NotImplementedException();
+                return "!!" + genericContext.MethodParameters[index];
             }
 
             public string GetGenericTypeParameter(TypeNameGenericContext genericContext, int index)
             {
-                throw new NotImplementedException();
+                return "!" + genericContext.TypeParameters[index];
             }
 
             public string GetModifiedType(string modifier, string unmodifiedType, bool isRequired)
             {
-                throw new NotImplementedException();
+                return unmodifiedType + (isRequired ? " modreq(" : " modopt(") + modifier + ")";
             }
 
             public string GetPinnedType(string elementType)
             {
-                throw new NotImplementedException();
+                return elementType + " pinned";
             }
 
             public string GetPointerType(string elementType)
             {
-                throw new NotImplementedException();
+                return elementType + "*";
             }
 
             public string GetPrimitiveType(PrimitiveTypeCode typeCode)
             {
-                throw new NotImplementedException();
+                switch (typeCode)
+                {
+                    case PrimitiveTypeCode.Boolean:
+                        return "bool";
+
+                    case PrimitiveTypeCode.Byte:
+                        return "byte";
+
+                    case PrimitiveTypeCode.Char:
+                        return "char";
+
+                    case PrimitiveTypeCode.Double:
+                        return "double";
+
+                    case PrimitiveTypeCode.Int16:
+                        return "short";
+
+                    case PrimitiveTypeCode.Int32:
+                        return "int";
+
+                    case PrimitiveTypeCode.Int64:
+                        return "long";
+
+                    case PrimitiveTypeCode.IntPtr:
+                        return typeof(IntPtr).ToString();
+
+                    case PrimitiveTypeCode.Object:
+                        return "object";
+
+                    case PrimitiveTypeCode.SByte:
+                        return "sbyte";
+
+                    case PrimitiveTypeCode.Single:
+                        return "float";
+
+                    case PrimitiveTypeCode.String:
+                        return "string";
+
+                    case PrimitiveTypeCode.TypedReference:
+                        throw new NotImplementedException("dotnet core does not implement TypedReference");
+
+                    case PrimitiveTypeCode.UInt16:
+                        return "ushort";
+
+                    case PrimitiveTypeCode.UInt32:
+                        return "uint";
+
+                    case PrimitiveTypeCode.UInt64:
+                        return "ulong";
+
+                    case PrimitiveTypeCode.UIntPtr:
+                        return typeof(UIntPtr).ToString();
+
+                    case PrimitiveTypeCode.Void:
+                        return "void";
+
+                    default:
+                        throw new ArgumentOutOfRangeException("Unrecognized primitive type");
+                }
             }
 
             public string GetSystemType()
             {
-                throw new NotImplementedException();
+                return typeof(System.Type).ToString();
             }
 
             public string GetSZArrayType(string elementType)
             {
-                throw new NotImplementedException();
+                return elementType + "[]";
             }
 
-            public string GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind)
+            public string GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind = 0)
             {
-                throw new NotImplementedException();
+                TypeDefinition typeDef = reader.GetTypeDefinition(handle);
+
+                string name = typeDef.Namespace.IsNil
+                    ? reader.GetString(typeDef.Name)
+                    : reader.GetString(typeDef.Namespace) + "." + reader.GetString(typeDef.Name);
+
+                // Test if the typedef is nested -- future implementations have typeDef.Attributes.IsNested()
+                if (typeDef.Attributes.HasFlag((System.Reflection.TypeAttributes)0x6))
+                {
+                    TypeDefinitionHandle declaringTypeHandle = typeDef.GetDeclaringType();
+                    return GetTypeFromDefinition(reader, declaringTypeHandle) + "/" + name;
+                }
+
+                return name;
             }
 
-            public string GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind)
+            public string GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind = 0)
             {
-                throw new NotImplementedException();
+                TypeReference reference = reader.GetTypeReference(handle);
+                Handle scope = reference.ResolutionScope;
+
+                string name = reference.Namespace.IsNil
+                    ? reader.GetString(reference.Name)
+                    : reader.GetString(reference.Namespace) + "." + reader.GetString(reference.Name);
+
+                switch (scope.Kind)
+                {
+                    case HandleKind.ModuleReference:
+                        return "[.module" + reader.GetString(reader.GetModuleReference((ModuleReferenceHandle)scope).Name) + "]" + name;
+
+                    case HandleKind.AssemblyReference:
+                        var assemblyReference = reader.GetAssemblyReference((AssemblyReferenceHandle)scope);
+                        return "[" + reader.GetString(assemblyReference.Name) + "]" + name;
+
+                    case HandleKind.TypeReference:
+                        return GetTypeFromReference(reader, (TypeReferenceHandle)scope) + "/" + name;
+
+                    default:
+                        if (scope == Handle.ModuleDefinition || scope.IsNil)
+                        {
+                            return name;
+                        }
+                        throw new ArgumentOutOfRangeException("Unrecognized type handle scope reference");
+                }
             }
 
             public string GetTypeFromSerializedName(string name)
             {
-                throw new NotImplementedException();
+                return name;
             }
 
             public string GetTypeFromSpecification(MetadataReader reader, TypeNameGenericContext genericContext, TypeSpecificationHandle handle, byte rawTypeKind)
             {
-                throw new NotImplementedException();
+                return reader.GetTypeSpecification(handle).DecodeSignature(this, genericContext);
             }
 
             public PrimitiveTypeCode GetUnderlyingEnumType(string type)
             {
-                throw new NotImplementedException();
+                Type runtimeType = Type.GetType(type.Replace('/', '+'));
+
+                if (runtimeType == typeof(DynamicKeywordBodyMode) || runtimeType == typeof(DynamicKeywordUseMode))
+                {
+                    return PrimitiveTypeCode.Int32;
+                }
+
+                throw new ArgumentOutOfRangeException("Unrecognized enumerated type");
             }
 
             public bool IsSystemType(string type)
             {
-                throw new NotImplementedException();
+                return type == "[System.Runtime]System.Type" || Type.GetType(type) == typeof(Type); 
             }
         }
     }
