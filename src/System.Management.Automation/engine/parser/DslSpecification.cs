@@ -453,7 +453,7 @@ namespace System.Management.Automation.Language
             {
                 var typeDef = _metadataReader.GetTypeDefinition(typeDefHandle);
                 var declaringType = typeDef.GetDeclaringType();
-                if (declaringType.IsNil)
+                if (declaringType.IsNil && IsKeywordSpecification(typeDef))
                 {
                     globalKeywordList.Add(ReadKeywordSpecification(typeDef));
                 }
@@ -503,7 +503,10 @@ namespace System.Management.Automation.Language
             foreach (var innerTypeHandle in typeDef.GetNestedTypes())
             {
                 var innerTypeDef = _metadataReader.GetTypeDefinition(innerTypeHandle);
-                innerKeywords.Add(ReadKeywordSpecification(innerTypeDef));
+                if (IsKeywordSpecification(innerTypeDef))
+                {
+                    innerKeywords.Add(ReadKeywordSpecification(innerTypeDef));
+                }
             }
 
             // Read the custom keyword properties
@@ -532,6 +535,10 @@ namespace System.Management.Automation.Language
             {
                 keyword.Parameters.Add(keywordParameter.Name, keywordParameter);
             }
+            foreach (var keywordProperty in keywordProperties)
+            {
+                keyword.Properties.Add(keywordProperty.Name, keywordProperty);
+            }
             foreach (var innerKeyword in innerKeywords)
             {
                 keyword.InnerKeywords.Add(innerKeyword.Keyword, innerKeyword);
@@ -553,6 +560,19 @@ namespace System.Management.Automation.Language
         private bool IsKeywordAttribute(CustomAttribute keywordAttribute)
         {
             return IsAttributeOfType(keywordAttribute, typeof(KeywordAttribute));
+        }
+
+        private bool IsKeywordSpecification(TypeDefinition typeDef)
+        {
+            foreach (CustomAttributeHandle caHandle in typeDef.GetCustomAttributes())
+            {
+                CustomAttribute customAttribute = _metadataReader.GetCustomAttribute(caHandle);
+                if (IsKeywordAttribute(customAttribute))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>

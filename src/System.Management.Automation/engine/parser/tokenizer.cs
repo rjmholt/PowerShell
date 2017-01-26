@@ -6,6 +6,7 @@ using Microsoft.PowerShell.Commands;
 using Microsoft.PowerShell.DesiredStateConfiguration.Internal;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;

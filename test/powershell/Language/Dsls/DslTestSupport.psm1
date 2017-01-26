@@ -23,7 +23,7 @@ function New-TestDllModule
 
     if (-not (Test-Path $dllDirPath))
     {
-        New-Item -ItemType Directory $dllDirPath
+        $null = New-Item -ItemType Directory $dllDirPath
     }
 
     $csSourcePath = Join-Path -Path $assetPath -ChildPath "$ModuleName.cs"
@@ -47,18 +47,42 @@ function Get-ExpressionFromModuleInNewContext
     $preludeDefs = $Prelude -join '`n'
 
     $command = @"
-`$env:PSModulePath += ([System.IO.Path]::PathSeparator + '$TestDrive' + [System.IO.Path]::DirectorySeparatorChar)
-
 $preludeDefs
 
 `$sb = [scriptblock]::Create('using module $moduleName')
-`$sb.Invoke()
+`$null = `$sb.Invoke()
 
 $Expression
 "@
 
-    Write-Host $command -ForegroundColor Cyan
+    # Write-Host $command -ForegroundColor Cyan
 
-    & $powershellExecutable -NoProfile -NonInteractive -OutputFormat XML -Command $command
+    $result = & $powershellExecutable -NoProfile -NonInteractive -OutputFormat XML -Command $command *>&1
+    #Write-Host $result -ForegroundColor Yellow
+
+    # Now search for the psobject to return
+
+    if ($result -is [System.Object[]])
+    {
+        foreach ($obj in $result)
+        {
+            if ($obj -isnot [System.IO.DirectoryInfo] -and $obj -is [psobject])
+            {
+                return $obj
+            }
+        }
+    }
+
+    if ($result -is [System.IO.DirectoryInfo])
+    {
+        throw [System.Exception] ("DirectoryInfo: " + $result.ToString())
+    }
+
+    if ($result -is [psobject])
+    {
+        return $result
+    }
+
+    throw [System.Exception] ("Bad powershell result: " + $result.GetType())
 }
 

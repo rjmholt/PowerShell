@@ -35,12 +35,18 @@ function Get-InnerKeywordStr
 Describe "Basic DSL addition to runtime namespace" -Tags "CI" {
     BeforeAll {
         $moduleName = "BasicDsl"
+        $savedModulePath = $env:PSModulePath
+        $env:PSModulePath += ([System.IO.Path]::PathSeparator + $TestDrive + [System.IO.Path]::DirectorySeparatorChar)
+    }
+
+    AfterAll {
+        $env:PSModulePath = $savedModulePath
     }
 
     It "imports the top level DSL keyword into the DynamicKeyword namespace" {
         $expression = Get-TopLevelKeywordStr -KeywordName $moduleName
         $kw = Get-ExpressionFromModuleInNewContext -TestDrive $TestDrive -ModuleName $moduleName -Expression $expression
-        $kw.Keyword.Value | Should Be $moduleName
+        $kw.Keyword | Should Be $moduleName
     }
 }
 
@@ -66,6 +72,15 @@ Describe "Adding syntax modes to the DynamicKeyword datastructure" -Tags "CI" {
         @{ mode = "UseMode"; expected = "Required"; condition = "DynamicKeywordUseMode.Required"; dsl = "MixedModeDsl"; keyword = "MixedModeKeyword" }
     )
 
+    BeforeAll {
+        $savedModulePath = $env:PSModulePath
+        $env:PSModulePath += ([System.IO.Path]::PathSeparator + $TestDrive + [System.IO.Path]::DirectorySeparatorChar)
+    }
+
+    AfterAll {
+        $env:PSModulePath = $savedModulePath
+    }
+
     It "sets <mode> to <expected> when specification is <condition>" -TestCases $testCases {
         param($mode, $expected, $condition, $dsl, $keyword)
 
@@ -85,30 +100,22 @@ Describe "Adding properties to DynamicKeyword datastructures" -Tags "CI" {
 
     BeforeAll {
         $savedModulePath = $env:PSModulePath
-        $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
+        $env:PSModulePath += ([System.IO.Path]::PathSeparator + $TestDrive + [System.IO.Path]::DirectorySeparatorChar)
 
         $moduleName = "PropertyDsl"
         $keywordName = "PropertyKeyword"
 
-        New-TestDllModule -TestDrive $TestDrive -ModuleName $moduleName
-
-        $context = [powershell]::Create()
-        $context.AddScript("using module $moduleName").Invoke()
-        $kw = Get-TopLevelKeywordInContext -Context $context -KeywordName $keywordName
+        $expression = Get-TopLevelKeywordStr -KeywordName $keywordName
+        $serialization = "Update-TypeData -SerializationDepth 4 -TypeName System.Management.Automation.Language.DynamicKeyword"
+        $kw = Get-ExpressionFromModuleInNewContext -TestDrive $TestDrive -ModuleName $moduleName -Prelude $serialization -Expression $expression
     }
 
     AfterAll {
-        if ($context -ne $null)
-        {
-            $context.Dispose()
-        }
-
         $env:PSModulePath = $savedModulePath
     }
 
     It "adds a property <name> to the keyword" -TestCases $testCases {
         param($name, $type, $mandatory)
-        $kw | Should Not Be $null
         $kw.Properties.$name.Name | Should Be $name
     }
 
