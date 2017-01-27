@@ -53,6 +53,7 @@ function Get-ExpressionFromModuleInNewContext
 
     $preludeDefs = $Prelude -join '`n'
 
+    # Put `using module $moduleName` on new lines
     $moduleImports = "@'`n" + (( $ModuleNames | ForEach-Object { "using module " + $_ }) -join "`n") + "`n'@"
 
     $command = @"
@@ -66,6 +67,8 @@ $Expression
 
     $result = & $powershellExecutable -NoProfile -NonInteractive -OutputFormat XML -Command $command *>&1
 
+    Wait-Debugger
+
     # Search for the psobject to return
 
     if ($result -is [System.Object[]])
@@ -77,11 +80,6 @@ $Expression
                 return $obj
             }
         }
-    }
-
-    if ($result -is [System.IO.DirectoryInfo])
-    {
-        throw [System.Exception] ("DirectoryInfo: " + $result.ToString())
     }
 
     if ($result -is [psobject])
