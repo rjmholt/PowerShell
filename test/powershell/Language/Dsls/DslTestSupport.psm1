@@ -9,6 +9,14 @@ $references = @(
 
 $assetPath = Join-Path $PSScriptRoot 'assets'
 
+$powershellExecutable = Join-Path -Path $PSHOME -ChildPath "powershell.exe"
+
+function Get-TestDrivePathString
+{
+    param([string] $TestDrive)
+    [System.IO.Path]::PathSeparator + $TestDrive + [System.IO.Path]::DirectorySeparatorChar
+}
+
 function New-TestDllModule
 {
     param([string] $TestDrive, [string] $ModuleName)
@@ -29,38 +37,36 @@ function New-TestDllModule
     $csSourcePath = Join-Path -Path $assetPath -ChildPath "$ModuleName.cs"
 
     Add-Type -Path $csSourcePath -OutputAssembly $dllPath # -ReferencedAssemblies $references
-
-    #Write-Host "Created new module $ModuleName at $dllPath" -ForegroundColor Gray
 }
-
-$powershellExecutable = Join-Path -Path $PSHOME -ChildPath "powershell.exe"
 
 function Get-ExpressionFromModuleInNewContext
 {
-    param([string] $TestDrive, [string] $ModuleName, [string[]] $Prelude, [string] $Expression)
+    param([string] $TestDrive, [string[]] $ModuleNames, [string[]] $Prelude, [string] $Expression)
 
     # Let the parent set up the modules
-    New-TestDllModule -TestDrive $TestDrive -ModuleName $ModuleName
+    foreach ($moduleName in $ModuleNames)
+    {
+        New-TestDllModule -TestDrive $TestDrive -ModuleName $ModuleName
+    }
 
-    # Now tell the child to import and evaluate
+    # Tell the child to import and evaluate
 
     $preludeDefs = $Prelude -join '`n'
+
+    $moduleImports = "@'`n" + (( $ModuleNames | ForEach-Object { "using module " + $_ }) -join "`n") + "`n'@"
 
     $command = @"
 $preludeDefs
 
-`$sb = [scriptblock]::Create('using module $moduleName')
+`$sb = [scriptblock]::Create($moduleImports)
 `$null = `$sb.Invoke()
 
 $Expression
 "@
 
-    # Write-Host $command -ForegroundColor Cyan
-
     $result = & $powershellExecutable -NoProfile -NonInteractive -OutputFormat XML -Command $command *>&1
-    #Write-Host $result -ForegroundColor Yellow
 
-    # Now search for the psobject to return
+    # Search for the psobject to return
 
     if ($result -is [System.Object[]])
     {

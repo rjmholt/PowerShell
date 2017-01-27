@@ -30,7 +30,7 @@ public class ParameterKeyword : Keyword
     }
 
     [KeywordParameter(Mandatory = true)]
-    public string MandatoryNamedParamter
+    public string MandatoryNamedParameter
     {
         get; set;
     }

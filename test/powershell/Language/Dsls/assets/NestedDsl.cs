@@ -1,7 +1,7 @@
 using System.Management.Automation.Language;
 
 [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
-public class NestedDsl
+public class NestedKeyword : Keyword
 {
     [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
     public class NestedKeyword1 : Keyword

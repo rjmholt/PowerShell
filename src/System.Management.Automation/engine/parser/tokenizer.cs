@@ -282,6 +282,10 @@ namespace System.Management.Automation.Language
             {
                 keyword.Parameters.Add(entry.Key, entry.Value);
             }
+            foreach (KeyValuePair<string, DynamicKeyword> entry in this.InnerKeywords)
+            {
+                keyword.InnerKeywords.Add(entry.Key, entry.Value);
+            }
             return keyword;
         }
 
