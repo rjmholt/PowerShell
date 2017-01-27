@@ -67,8 +67,6 @@ $Expression
 
     $result = & $powershellExecutable -NoProfile -NonInteractive -OutputFormat XML -Command $command *>&1
 
-    Wait-Debugger
-
     # Search for the psobject to return
 
     if ($result -is [System.Object[]])
@@ -85,6 +83,11 @@ $Expression
     if ($result -is [psobject])
     {
         return $result
+    }
+
+    if ($result -eq $null)
+    {
+        return $null
     }
 
     throw [System.Exception] ("Bad powershell result: " + $result.GetType())

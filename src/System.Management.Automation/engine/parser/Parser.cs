@@ -3414,6 +3414,8 @@ namespace System.Management.Automation.Language
         /// <returns></returns>
         private StatementAst DynamicKeywordStatementRule(Token functionName, DynamicKeyword keywordData)
         {
+            DynamicKeywordContext.EnterScope(keywordData);
+
             //////////////////////////////////////////////////////////////////////////////////
             // If a custom action was provided. then invoke it
             //////////////////////////////////////////////////////////////////////////////////
@@ -3432,6 +3434,7 @@ namespace System.Management.Automation.Language
                 }
                 catch (Exception e)
                 {
+                    DynamicKeywordContext.LeaveScope();
                     ReportError(functionName.Extent, () => ParserStrings.DynamicKeywordPreParseException, keywordData.ResourceName, e.ToString());
                     return null;
                 }
@@ -3439,6 +3442,7 @@ namespace System.Management.Automation.Language
 
             if (keywordData.IsReservedKeyword)
             {
+                DynamicKeywordContext.LeaveScope();
                 // ErrorRecovery: eat the token
                 ReportError(functionName.Extent, () => ParserStrings.UnsupportedReservedKeyword, keywordData.Keyword);
                 return null;
@@ -3446,6 +3450,7 @@ namespace System.Management.Automation.Language
 
             if (keywordData.HasReservedProperties)
             {
+                DynamicKeywordContext.LeaveScope();
                 // ErrorRecovery: eat the token
                 ReportError(functionName.Extent, () => ParserStrings.UnsupportedReservedProperty, "'Require', 'Trigger', 'Notify', 'Before', 'After' and 'Subscribe'");
                 return null;
@@ -3482,6 +3487,7 @@ namespace System.Management.Automation.Language
                         // Name not required so report missing brace
                         ReportIncompleteInput(After(functionName.Extent), () => ParserStrings.MissingBraceInObjectDefinition);
                     }
+                    DynamicKeywordContext.LeaveScope();
                     return null;
                 }
 
@@ -3492,6 +3498,7 @@ namespace System.Management.Automation.Language
                     lCurly = nameToken;
                     if (keywordData.NameMode == DynamicKeywordNameMode.NameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired)
                     {
+                        DynamicKeywordContext.LeaveScope();
                         ReportError(After(functionName), () => ParserStrings.RequiredNameOrExpressionMissing);
                         UngetToken(nameToken);
                         return null;
@@ -3501,6 +3508,7 @@ namespace System.Management.Automation.Language
                 {
                     if (keywordData.NameMode == DynamicKeywordNameMode.NoName)
                     {
+                        DynamicKeywordContext.LeaveScope();
                         ReportError(After(functionName), () => ParserStrings.UnexpectedNameForType, functionName.Text, nameToken.Text);
                         UngetToken(nameToken);
                         return null;
@@ -3512,6 +3520,7 @@ namespace System.Management.Automation.Language
                     // If only a simple name is allowed, then the string must be non-null.
                     if ((keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleOptionalName) && string.IsNullOrEmpty(elementName))
                     {
+                        DynamicKeywordContext.LeaveScope();
                         ReportIncompleteInput(After(functionName), () => ParserStrings.RequiredNameOrExpressionMissing);
                         UngetToken(nameToken);
                         return null;
@@ -3534,12 +3543,14 @@ namespace System.Management.Automation.Language
                             // It wasn't an '{' and it wasn't a name expression so it's a unexpected token.
                             ReportError(After(functionName), () => ParserStrings.UnexpectedToken, nameToken.Text);
                         }
+                        DynamicKeywordContext.LeaveScope();
                         return null;
                     }
 
                     // Ok, we got a name expression, but we're expecting no name, so it's and error.
                     if (keywordData.NameMode == DynamicKeywordNameMode.NoName)
                     {
+                        DynamicKeywordContext.LeaveScope();
                         ReportError(After(functionName), () => ParserStrings.UnexpectedNameForType, functionName.Text, instanceName.ToString());
                         return null;
                     }
@@ -3547,6 +3558,7 @@ namespace System.Management.Automation.Language
                     // We were expecting a simple name so report an error
                     if (keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleOptionalName)
                     {
+                        DynamicKeywordContext.LeaveScope();
                         // If no match, then this is an incomplete token BUGBUG fix message
                         ReportError(nameToken.Extent, () => ParserStrings.UnexpectedToken, nameToken.Text);
                         return null;
@@ -3578,6 +3590,7 @@ namespace System.Management.Automation.Language
                         UngetToken(lCurly);
                         ReportIncompleteInput(After(functionName.Extent), () => ParserStrings.MissingBraceInObjectDefinition);
 
+                        DynamicKeywordContext.LeaveScope();
                         // Preserve the name expression for tab completion
                         return originalInstanceName == null
                                    ? null
@@ -3619,9 +3632,11 @@ namespace System.Management.Automation.Language
                             var errorExpr = new ErrorExpressionAst(errorExtent);
                             var memberExpr = new MemberExpressionAst(originalInstanceName.Extent, originalInstanceName, errorExpr, @static: false);
 
+                            DynamicKeywordContext.LeaveScope();
                             return new ErrorStatementAst(errorExtent, new[] { memberExpr });
                         }
 
+                        DynamicKeywordContext.LeaveScope();
                         UngetToken(lCurly);
                         // Preserve the name expression for tab completion
                         return originalInstanceName == null
@@ -3672,6 +3687,7 @@ namespace System.Management.Automation.Language
                     // Failed to read the statement body
                     ReportIncompleteInput(After(lCurly), () => ParserStrings.MissingStatementAfterKeyword, keywordData.Keyword);
 
+                    DynamicKeywordContext.LeaveScope();
                     // Preserve the name expression for tab completion
                     return originalInstanceName == null
                                ? null
@@ -3725,11 +3741,13 @@ namespace System.Management.Automation.Language
                 }
                 catch (Exception e)
                 {
+                    DynamicKeywordContext.LeaveScope();
                     ReportError(functionName.Extent, () => ParserStrings.DynamicKeywordPostParseException, keywordData.Keyword, e.ToString());
                     return null;
                 }
             }
 
+            DynamicKeywordContext.LeaveScope();
             return dynamicKeywordAst;
         }
 

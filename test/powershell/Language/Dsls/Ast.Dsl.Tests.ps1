@@ -45,10 +45,10 @@ $GetInnerKeywordDef
 function $GetKeywordSet
 {
     param(`$Ast, `$NamePaths)
-    `$acc = @()
+    `$acc = @{}
     foreach (`$namePath in `$NamePaths)
     {
-        `$acc += Get-InnerKeyword -Ast `$Ast -NamePath `$namePath
+        `$acc += @{`$namePath[-1] = Get-InnerKeyword -Ast `$Ast -NamePath `$namePath}
     }
     `$acc
 }
@@ -69,6 +69,22 @@ function Get-AstInvocationExpression
     $expr = $astGetter,$accumulator -join "`n"
 
     Get-ExpressionFromModuleInNewContext -TestDrive $TestDrive -ModuleNames $Modules -Prelude $Prelude -Expression $expr
+}
+
+function Get-SerializedObjectChild
+{
+    param($SerializedObject, $PathToChild)
+
+    $curr = $SerializedObject
+    foreach($node in $PathToChild)
+    {
+        if ($curr -eq $null)
+        {
+            return $null
+        }
+        $curr = $curr.$node
+    }
+    $curr
 }
 
 Describe "Basic DSL syntax loading into AST" -Tags "CI" {
@@ -136,12 +152,13 @@ $dslName
     }
 }
 "@
-    $namePaths = @()
-    foreach ($case in $testCases)
-    {
-        $namePaths += @($case.pathToKeyword + $case.keywordToFind)
-    }
 
+        # Rebuild a nested array expression from what we have
+        $paths = "@(" + (($testCases | ForEach-Object { "@(" + (($_.pathToKeyword + $_.keywordToFind) -join ",") + ")" }) -join ",") + ")"
+
+        $astGetter = "$GetKeywordSet -NamePaths $paths"
+
+        $astDict = Get-AstInvocationExpression -TestDrive $TestDrive -Modules $dslName -Prelude $GetKeywordSetDef -Expression $expr -AstManipulator $astGetter
     }
 
     AfterAll {
@@ -149,12 +166,9 @@ $dslName
     }
 
     It "contains <keywordToFind> under the top level keyword" -TestCases $testCases {
-        <#
         param($keywordToFind, $pathToKeyword)
 
-        $kw = Get-ChildKeywordByNamePath -Ast $ast -NamePath $($pathToKeyword + $keywordToFind)
-        $kw.Keyword.Keyword | Should Be $keywordToFind
-        #>
+        $astDict.$keywordToFind.Keyword.Keyword | Should Be $keywordToFind
     }
 }
 
