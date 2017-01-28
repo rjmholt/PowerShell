@@ -7197,12 +7197,15 @@ namespace System.Management.Automation.Language
                         },
                     true);
 
+                // Keyword may not be followed by a curly brace
+                Token errorToken = LCurly ?? FunctionName;
+
                 cea.Add(
                     new CommandParameterAst(
                         FunctionName.Extent,
                         "KeywordData",
                         indexExpr,
-                        LCurly.Extent));
+                        errorToken.Extent));
 
                 //
                 // Add the -Name parameter
@@ -7212,17 +7215,17 @@ namespace System.Management.Automation.Language
                         FunctionName.Extent,
                         "Name",
                         InstanceName,
-                        LCurly.Extent));
+                        errorToken.Extent));
 
                 //
                 // Add the -Value parameter
                 //
                 cea.Add(
                     new CommandParameterAst(
-                        LCurly.Extent,
+                        errorToken.Extent,
                         "Value",
                         expr,
-                        LCurly.Extent));
+                        errorToken.Extent));
 
                 //
                 // Add the -SourceMetadata parameter
@@ -7233,12 +7236,12 @@ namespace System.Management.Automation.Language
                                         + "::" + FunctionName.Extent.Text;
                 cea.Add(
                     new CommandParameterAst(
-                        LCurly.Extent, "SourceMetadata",
+                        errorToken.Extent, "SourceMetadata",
                         new StringConstantExpressionAst(
                             FunctionName.Extent,
                             sourceMetadata,
                             StringConstantType.BareWord),
-                        LCurly.Extent));
+                        errorToken.Extent));
             }
 
             //
