@@ -89,12 +89,12 @@ namespace System.Management.Automation.Language
     }
 
     /// <summary>
-    /// Defines the context under which DynamicKeywords might be invoked. This
-    /// includes globally defined keywords, scoped/nested keywords, and pushing/popping
-    /// the DynamicKeyword namespace
+    /// Defines the schema/behaviour for a dynamic keyword.
+    /// a constrained 
     /// </summary>
-    internal class DynamicKeywordContext
+    public class DynamicKeyword
     {
+        #region static properties/functions
 
         /// <summary>
         /// Keeps track of the current scope of the DynamicKeyword context. When scoped
@@ -108,7 +108,7 @@ namespace System.Management.Automation.Language
                     (t_dynamicKeywordScope = new Stack<DynamicKeyword>());
             }
         }
-        [ThreadStatic]
+        //[ThreadStatic]
         private static Stack<DynamicKeyword> t_dynamicKeywordScope;
 
         /// <summary>
@@ -122,7 +122,7 @@ namespace System.Management.Automation.Language
                     (t_globalKeywords = new Dictionary<string, DynamicKeyword>(StringComparer.OrdinalIgnoreCase));
             }
         }
-        [ThreadStatic]
+        //[ThreadStatic]
         private static Dictionary<string, DynamicKeyword> t_globalKeywords;
 
         /// <summary>
@@ -137,38 +137,40 @@ namespace System.Management.Automation.Language
                     (t_dynamicKeywordNamepspaceStack = new Stack<Dictionary<string, DynamicKeyword>>());
             }
         }
-        [ThreadStatic]
+        //[ThreadStatic]
         private static Stack<Dictionary<string, DynamicKeyword>> t_dynamicKeywordNamepspaceStack;
 
         /// <summary>
-        /// Adds a new global keyword. If a keyword by the same name is already defined, it is overridden
+        /// Reset the keyword table to a new empty collection.
         /// </summary>
-        /// <param name="keyword"></param>
-        public static void AddKeyword(DynamicKeyword keyword)
+        public static void Reset()
         {
-            if (keyword == null)
-            {
-                PSArgumentNullException e = PSTraceSource.NewArgumentNullException("keywordToAdd");
-                throw e;
-            }
-
-            // Allow overwriting of the existing entries
-            string name = keyword.Keyword;
-            if (string.IsNullOrEmpty(name))
-            {
-                throw PSTraceSource.NewArgumentNullException("keywordToAdd.Keyword");
-            }
-
-            GlobalKeywords.Remove(name);
-            GlobalKeywords.Add(name, keyword);
+            t_globalKeywords = new Dictionary<string, DynamicKeyword>(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
-        /// Retrieve a global keyword by name. Returns null if none found
+        /// Push current dynamicKeywords cache into stack
         /// </summary>
-        /// <param name="name"></param>
-        /// <returns></returns>
-        public static DynamicKeyword GetGlobalKeyword(string name)
+        public static void Push()
+        {
+            DynamicKeywordNamespaceStack.Push(t_globalKeywords);
+            Reset();
+        }
+
+        /// <summary>
+        /// Pop up previous dynamicKeywords cache
+        /// </summary>
+        public static void Pop()
+        {
+            t_globalKeywords = DynamicKeywordNamespaceStack.Pop();
+        }
+
+        /// <summary>
+        /// Retrieve a globally defined/available DynamicKeyword by name
+        /// </summary>
+        /// <param name="name">the name of the DynamicKeyword</param>
+        /// <returns>the named DynamicKeyword</returns>
+        public static DynamicKeyword GetKeyword(string name)
         {
             DynamicKeyword keyword;
             GlobalKeywords.TryGetValue(name, out keyword);
@@ -176,16 +178,23 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// Find a scoped keyword by name, searching the global namespace and then
-        /// up the scope stack. This should only be called after the name has been checked
-        /// against existing keywords -- it will throw if there is no keyword by the
-        /// given name found
+        /// Returns a copied list of all of the existing dynamic keyword definitions.
         /// </summary>
-        /// <param name="name"></param>
-        /// <returns></returns>
+        /// <returns>a list of all global DynamicKeywords</returns>
+        public static List<DynamicKeyword> GetKeyword()
+        {
+            return new List<DynamicKeyword>(GlobalKeywords.Values);
+        }
+
+        /// <summary>
+        /// Find a scoped keyword by name, searching the global namespace and then
+        /// up the scope stack. Returns null if no keyword is found
+        /// </summary>
+        /// <param name="name">the name of the keyword to find</param>
+        /// <returns>the named DynamicKeyword or null if no such keyword</returns>
         public static DynamicKeyword GetKeywordInScope(string name)
         {
-            DynamicKeyword keyword = GetGlobalKeyword(name);
+            DynamicKeyword keyword = GetKeyword(name);
             if (keyword != null)
             {
                 return keyword;
@@ -201,38 +210,14 @@ namespace System.Management.Automation.Language
                 }
             }
 
-            throw PSTraceSource.NewArgumentException("name");
-
+            return null;
         }
 
         /// <summary>
-        /// Get a copied list of all globally defined DynamicKeywords
+        /// Check whether a DynamicKeyword corresponding to a name is globally defined
         /// </summary>
-        /// <returns></returns>
-        public static List<DynamicKeyword> GetKeyword()
-        {
-            return new List<DynamicKeyword>(GlobalKeywords.Values);
-        }
-
-        /// <summary>
-        /// Remove a keyword from the global namespace
-        /// </summary>
-        /// <param name="name"></param>
-        public static void RemoveKeyword(string name)
-        { 
-            if (string.IsNullOrEmpty(name))
-            {
-                PSArgumentNullException e = PSTraceSource.NewArgumentNullException("name");
-                throw e;
-            }
-            GlobalKeywords.Remove(name);
-        }
-
-        /// <summary>
-        /// Test if a DynamicKeyword is defined globally
-        /// </summary>
-        /// <param name="name"></param>
-        /// <returns></returns>
+        /// <param name="name">the name of the DynamicKeyword</param>
+        /// <returns>true if the DynamicKeyword is defined in the global namespace, false otherwise</returns>
         public static bool ContainsKeyword(string name)
         {
             if (string.IsNullOrEmpty(name))
@@ -245,29 +230,62 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// Wipe all global DynamicKeywords in the current namespace
+        /// Check whether a DynamicKeyword has a definition in the current scope
         /// </summary>
-        public static void ResetCurrentNamespace()
+        /// <param name="keywordName">the name of the keyword to query</param>
+        /// <returns>true if the keyword is defined in global or local scope, false otherwise</returns>
+        public static bool IsKeywordDefinedInCurrentScope(string keywordName)
         {
-            t_globalKeywords = new Dictionary<string, DynamicKeyword>(StringComparer.OrdinalIgnoreCase);
+            if (GlobalKeywords.ContainsKey(keywordName) && !DynamicKeyword.IsHiddenKeyword(keywordName))
+            {
+                return true;
+            }
+            foreach (var scopedKeyword in DynamicKeywordScope)
+            {
+                if (scopedKeyword.InnerKeywords.ContainsKey(keywordName))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>
-        /// Save the current global DynamicKeyword set and remove it from discovery, then
-        /// create a fresh namespace with no DynamicKeywords defined
+        /// Add a keyword to the global namespace
         /// </summary>
-        public static void PushFreshNamespace()
+        /// <param name="keywordToAdd">the DynamicKeyword to add</param>
+        public static void AddKeyword(DynamicKeyword keywordToAdd)
         {
-            DynamicKeywordNamespaceStack.Push(t_globalKeywords);
-            ResetCurrentNamespace();
+            if (keywordToAdd == null)
+            {
+                PSArgumentNullException e = PSTraceSource.NewArgumentNullException("keywordToAdd");
+                throw e;
+            }
+
+            // Allow overwriting of the existing entries
+            string name = keywordToAdd.Keyword;
+            if (string.IsNullOrEmpty(name))
+            {
+                throw PSTraceSource.NewArgumentNullException("keywordToAdd.Keyword");
+            }
+
+            GlobalKeywords.Remove(name);
+            GlobalKeywords.Add(name, keywordToAdd);
         }
 
         /// <summary>
-        /// Discard the current global DynamicKeyword namespace and restore the last namespace saved
+        /// Remove a single entry from the dynamic keyword collection
+        /// and clean up any associated data.
         /// </summary>
-        public static void RestorePreviousNamespace()
+        /// <param name="name">the name of the keyword to remove</param>
+        public static void RemoveKeyword(string name)
         {
-            t_globalKeywords = DynamicKeywordNamespaceStack.Pop();
+            if (string.IsNullOrEmpty(name))
+            {
+                PSArgumentNullException e = PSTraceSource.NewArgumentNullException("name");
+                throw e;
+            }
+            GlobalKeywords.Remove(name);
         }
 
         /// <summary>
@@ -285,103 +303,6 @@ namespace System.Management.Automation.Language
         public static void LeaveScope()
         {
             DynamicKeywordScope.Pop();
-        }
-
-        public static bool IsDefinedKeyword(string keywordName)
-        {
-            if (GlobalKeywords.ContainsKey(keywordName) && !DynamicKeyword.IsHiddenKeyword(keywordName))
-            {
-                return true;
-            }
-            foreach (var scopedKeyword in DynamicKeywordScope)
-            {
-                if (scopedKeyword.InnerKeywords.ContainsKey(keywordName))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Defines the schema/behaviour for a dynamic keyword.
-    /// a constrained 
-    /// </summary>
-    public class DynamicKeyword
-    {
-        #region static properties/functions
-
-        /// <summary>
-        /// Reset the keyword table to a new empty collection.
-        /// </summary>
-        public static void Reset()
-        {
-            DynamicKeywordContext.ResetCurrentNamespace();
-        }
-
-        /// <summary>
-        /// Push current dynamicKeywords cache into stack
-        /// </summary>
-        public static void Push()
-        {
-            DynamicKeywordContext.PushFreshNamespace();
-        }
-
-        /// <summary>
-        /// Pop up previous  dynamicKeywords cache
-        /// </summary>
-        public static void Pop()
-        {
-            DynamicKeywordContext.RestorePreviousNamespace();
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="name"></param>
-        /// <returns></returns>
-        public static DynamicKeyword GetKeyword(string name)
-        {
-            return DynamicKeywordContext.GetGlobalKeyword(name);
-        }
-
-        /// <summary>
-        /// Returns a copied list of all of the existing dynamic keyword definitions.
-        /// </summary>
-        /// <returns></returns>
-        public static List<DynamicKeyword> GetKeyword()
-        {
-            return DynamicKeywordContext.GetKeyword();
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="name"></param>
-        /// <returns></returns>
-        public static bool ContainsKeyword(string name)
-        {
-            return DynamicKeywordContext.ContainsKeyword(name);
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="keywordToAdd"></param>
-        public static void AddKeyword(DynamicKeyword keywordToAdd)
-        {
-            DynamicKeywordContext.AddKeyword(keywordToAdd);
-        }
-
-        /// <summary>
-        /// Remove a single entry from the dynamic keyword collection
-        /// and clean up any associated data.
-        /// </summary>
-        /// <param name="name"></param>
-        public static void RemoveKeyword(string name)
-        {
-            DynamicKeywordContext.RemoveKeyword(name);
         }
 
         /// <summary>
@@ -978,7 +899,7 @@ namespace System.Management.Automation.Language
             {
                 return true;
             }
-            if (DynamicKeywordContext.IsDefinedKeyword(str))
+            if (DynamicKeyword.IsKeywordDefinedInCurrentScope(str))
             {
                 return true;
             }
@@ -3139,7 +3060,7 @@ namespace System.Management.Automation.Language
             }
             Release(formatSb);
 
-            if (DynamicKeywordContext.IsDefinedKeyword(str))
+            if (DynamicKeyword.IsKeywordDefinedInCurrentScope(str))
             {
                 return NewToken(TokenKind.DynamicKeyword);
             }
@@ -3765,7 +3686,7 @@ namespace System.Management.Automation.Language
                     if (tokenKind != TokenKind.InlineScript || InWorkflowContext)
                         return NewToken(tokenKind);
                 }
-                if (DynamicKeyword.ContainsKeyword(ident) && !DynamicKeyword.IsHiddenKeyword(ident))
+                if (DynamicKeyword.IsKeywordDefinedInCurrentScope(ident))
                 {
                     return NewToken(TokenKind.DynamicKeyword);
                 }
