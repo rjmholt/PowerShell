@@ -26,6 +26,41 @@ public class TypeExtension : Keyword
         // String should represent the delegate to be referenced
         [KeywordParameter()]
         public string CodeReference { get; set; }
+
+        // String to represent the type containing the CodeReference delegate
+        [KeywordParameter()]
+        public string ReferencedType { get; set; }
+
+        private static ParseError[] CheckParameters(DynamicKeywordStatementAst kwStmt)
+        {
+            var errors = new List<ParseError>();
+
+            DynamicKeyword keyword = kwStmt.Keyword;
+
+            if (keyword.Properties.Contains("ScriptMethod"))
+            {
+                if (keyword.Properties.Contains("CodeReference")))
+                {
+                    return new [] { new ParseError(kwStmt.Extent, "NonAllowedParameter", "The CodeReference parameter is not in the ScriptMethod set") };
+                }
+            }
+            else if (keyword.Properties.Contains("CodeReference"))
+            {
+                if (keyword.Properties.Contains("ScriptMethod"))
+                {
+                    return new [] { new ParseError(kwStmt.Extent, "NonAllowedParameter", "The ScriptMethod parameter is not in the CodeReference set") };
+                }
+
+                string codeRef = keyword.Properties["CodeReference"];
+                Type referencedType = Type.GetType()
+            }
+            else
+            {
+                return new [] { new ParseError(kwStmt.Extent, "MissingParameter", "Either ScriptMethod or CodeReference is required") };
+            }
+
+            return null;
+        }
     }
 
     // Add a property to the type

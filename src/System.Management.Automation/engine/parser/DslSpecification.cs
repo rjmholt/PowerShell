@@ -11,8 +11,10 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
+using System.Collections;
 using System.Collections.Immutable;
 using System.Text;
+using System.Collections.ObjectModel;
 
 namespace System.Management.Automation.Language
 {
@@ -60,6 +62,14 @@ namespace System.Management.Automation.Language
         /// invocation after parsing
         /// </summary>
         public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
+        {
+            get; set;
+        }
+
+        /// <summary>
+        /// Specifies the call to be made at runtime for the keyword invocation
+        /// </summary>
+        public Func<DynamicKeywordStatementAst, Collection<PSObject>> RuntimeCall
         {
             get; set;
         }

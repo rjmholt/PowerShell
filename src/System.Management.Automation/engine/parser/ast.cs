@@ -7019,7 +7019,7 @@ namespace System.Management.Automation.Language
 
         #region Internal Properties/Methods
 
-        internal DynamicKeyword Keyword
+        public DynamicKeyword Keyword
         {
             get
             {
