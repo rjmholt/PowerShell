@@ -2,9 +2,8 @@ $compileModuleFunc = "New-TestDllModule"
 
 $references = @(
     'System.Management.Automation',
-    'System.Management.Automation.Language',
     'System',
-    'System.Collection'
+    'System.Collections'
 )
 
 $assetPath = Join-Path $PSScriptRoot 'assets'
@@ -36,7 +35,7 @@ function New-TestDllModule
 
     $csSourcePath = Join-Path -Path $assetPath -ChildPath "$ModuleName.cs"
 
-    Add-Type -Path $csSourcePath -OutputAssembly $dllPath # -ReferencedAssemblies $references
+    Add-Type -Path $csSourcePath -OutputAssembly $dllPath -ReferencedAssemblies $references
 }
 
 function Get-ScriptBlockResultInNewProcess
