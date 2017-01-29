@@ -39,7 +39,42 @@ function New-TestDllModule
     Add-Type -Path $csSourcePath -OutputAssembly $dllPath # -ReferencedAssemblies $references
 }
 
-function Get-ExpressionFromModuleInNewContext
+function Get-ScriptBlockResultInNewProcess
+{
+    param ([string] $TestDrive, [string[]] $ModuleNames, [scriptblock] $Command, [object[]] $Arguments)
+
+    foreach ($moduleName in $ModuleNames)
+    {
+        New-TestDllModule -TestDrive $TestDrive -ModuleName $moduleName
+    }
+
+    $result = & $powershellExecutable -NoProfile -NonInteractive -OutputFormat XML -Command $Command -args $Arguments *>&1
+
+    if ($result -is [System.Object[]])
+    {
+        foreach ($obj in $result)
+        {
+            if ($obj -isnot [System.IO.DirectoryInfo] -and $obj -is [psobject])
+            {
+                return $obj
+            }
+        }
+    }
+
+    if ($result -is [psobject])
+    {
+        return $result
+    }
+
+    if ($result -eq $null)
+    {
+        return $null
+    }
+
+    throw [System.Exception] ("Bad powershell result: " + $result.GetType())
+}
+
+function Get-ExpressionFromModuleInNewProcess
 {
     param([string] $TestDrive, [string[]] $ModuleNames, [string[]] $Prelude, [string] $Expression)
 

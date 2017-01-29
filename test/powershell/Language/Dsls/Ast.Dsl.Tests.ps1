@@ -92,9 +92,18 @@ Describe "Basic DSL syntax loading into AST" -Tags "CI" {
         $savedModulePath = $env:PSModulePath
         $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
 
-        $moduleName = "BasicDsl"
-        $astGetter = "$GetKeywordByName -Name $moduleName"
-        $ast = Get-AstInvocationExpression -TestDrive $TestDrive -Modules $moduleName -Prelude $GetKeywordByNameDef -Expression "$moduleName" -AstManipulator $astGetter
+        $keyword = Get-ScriptBlockResultInNewProcess -TestDrive $TestDrive -ModuleNames "BasicDsl" -Command {
+            $null = [scriptblock]::Create("using module BasicDsl").Invoke()
+
+            $bindingFlags = [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Instance
+            $keywordProperty = [System.Management.Automation.Language.DynamicKeywordStatementAst].GetProperty("Keyword", $bindingFlags)
+
+            $ast = [scriptblock]::Create("BasicDsl").Ast.Find({
+                $args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst]
+            }, $true)
+
+            $keywordProperty.GetValue($ast)
+        }
     }
 
     AfterAll {
@@ -102,31 +111,31 @@ Describe "Basic DSL syntax loading into AST" -Tags "CI" {
     }
 
     It "imports a minimal C# defined DSL into the AST" {
-        $ast.Keyword.Keyword | Should Be $moduleName
+        $keyword.Keyword | Should Be "BasicDsl"
     }
 }
 
 Describe "More complex nested keyword structure loading into AST" -Tags "CI" {
-    $testCases = @(
-        @{ keywordToFind = "NestedKeyword1"; pathToKeyword = @() },
-        @{ keywordToFind = "NestedKeyword2"; pathToKeyword = @() },
-        @{ keywordToFind = "NestedKeyword1_1"; pathToKeyword = @("NestedKeyword1") },
-        @{ keywordToFind = "NestedKeyword1_2"; pathToKeyword = @("NestedKeyword1") },
-        @{ keywordToFind = "NestedKeyword2_1"; pathToKeyword = @("NestedKeyword2") },
-        @{ keywordToFind = "NestedKeyword2_2"; pathToKeyword = @("NestedKeyword2") },
-        @{ keywordToFind = "NestedKeyword1_1_1"; pathToKeyword = @("NestedKeyword1", "NestedKeyword1_1") },
-        @{ keywordToFind = "NestedKeyword2_2_1"; pathToKeyword = @("NestedKeyword2", "NestedKeyword2_2") },
-        @{ keywordToFind = "NestedKeyword2_2_1_1"; pathToKeyword = @("NestedKeyword2", "NestedKeyword2_2", "NestedKeyword2_2_1") }
-    )
-
     BeforeAll {
         $dslName = "NestedDsl"
 
         $savedModulePath = $env:PSModulePath
         $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
 
+        $testCases = @(
+            @{ child = "NestedKeyword1"; parent = "NestedKeyword" },
+            @{ child = "NestedKeyword2"; parent = "NestedKeyword" },
+            @{ child = "NestedKeyword1_1"; parent = "NestedKeyword1" },
+            @{ child = "NestedKeyword1_2"; parent = "NestedKeyword1" },
+            @{ child = "NestedKeyword2_1"; parent = "NestedKeyword2" },
+            @{ child = "NestedKeyword2_2"; parent = "NestedKeyword2" },
+            @{ child = "NestedKeyword1_1_1"; parent = "NestedKeyword1_1" },
+            @{ child = "NestedKeyword2_2_1"; parent = "NestedKeyword2_2" },
+            @{ child = "NestedKeyword2_2_1_1"; parent = "NestedKeyword2_2_1" }
+        )
+
         $expr = @"
-$dslName
+NestedKeyword
 {
     NestedKeyword1
     {
@@ -154,62 +163,124 @@ $dslName
 "@
 
         # Rebuild a nested array expression from what we have
-        $paths = "@(" + (($testCases | ForEach-Object { "@(" + (($_.pathToKeyword + $_.keywordToFind) -join ",") + ")" }) -join ",") + ")"
 
-        $astGetter = "$GetKeywordSet -NamePaths $paths"
+        $sb = {
+            $null = [scriptblock]::Create("using module NestedDsl").Invoke()
+            # Dsl use goes here
+            $ast = [scriptblock]::Create($args[0]).Ast
 
-        $astDict = Get-AstInvocationExpression -TestDrive $TestDrive -Modules $dslName -Prelude $GetKeywordSetDef -Expression $expr -AstManipulator $astGetter
+            $astFinder =  {
+                param($keywordName)
+                [scriptblock]::Create(@"
+{
+    `$bindingFlags = [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Instance
+    `$keywordProperty = [System.Management.Automation.Language.DynamicKeywordStatementAst].GetProperty("Keyword", `$bindingFlags)
+
+    `$args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst] -and
+    `$keywordProperty.GetValue(`$args[0]).Keyword -eq '$keywordName'
+}
+"@)
+}
+
+            $parentChildPairs = $args[1] -split ";"
+            $accumulator = @{}
+            foreach ($parentChild in $parentChildPairs)
+            {
+                $pair = $parentChild -split ","
+
+                $parent = $ast.Find((& $astFinder $pair[0]), $true)
+
+                if ($parent -eq $null)
+                {
+                    continue
+                }
+
+                $child = $parent.Find((& $astFinder $pair[1]), $true)
+
+                if ($child -ne $null)
+                {
+                    $accumulator += @{ $pair[1] = $pair[0] }
+                }
+            }
+
+            $accumulator
+        }
+
+        $parentChildPairs = ($testCases | ForEach-Object { $_.parent + "," + $_.child }) -join ";"
+        $astDict = Get-ScriptBlockResultInNewProcess -TestDrive $TestDrive -ModuleNames "NestedDsl" -Command $sb -Arguments $expr,$parentChildPairs
     }
 
     AfterAll {
         $env:PSModulePath = $savedModulePath
     }
 
-    It "contains <keywordToFind> under the top level keyword" -TestCases $testCases {
-        param($keywordToFind, $pathToKeyword)
+    It "contains <child> under higher level keyword <parent>" -TestCases $testCases {
+        param($parent, $child)
 
-        $astDict.$keywordToFind.Keyword.Keyword | Should Be $keywordToFind
+        $astDict.$child | Should Be $parent
     }
 }
 
-Describe "DSL Body most AST parsing" {
-    $testCases = @(
-        @{ keyword = "HashtableBodyKeyword"; script = "{0} {{ x = 1 }}"; bodyType = "Hashtable" },
-        @{ keyword = "ScriptBlockBodyKeyword"; script = "{0} {{ foo }}"; bodyType = "ScriptBlockiExpression" }
-    )
-
+Describe "DSL Body most AST parsing" -Tags "CI" {
     BeforeAll {
-        $dslName = "BodyModeDsl"
-
         $savedModulePath = $env:PSModulePath
         $env:PSModulePath += Get-TestDrivePathString -TestDrive $TestDrive
-
-        New-TestDllModule -TestDrive $TestDrive -ModuleName $dslName
     }
 
     AfterAll {
         $env:PSModulePath = $savedModulePath
     }
 
-<#
-    It "has a body AST of type <bodyType> as a child AST" -TestCases $testCases {
-        param($keyword, $bodyType)
+    It "ScriptBlock keyword has ScriptBlock body" {
+        $sb = {
+            $null = [scriptblock]::Create("using module BodyModeDsl").Invoke()
 
-        $ast = [scriptblock]::Create($script -f $keyword).Ast
+            $bindingFlags = [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Instance
+            $bodyProperty = [System.Management.Automation.Language.DynamicKeywordStatementAst].GetProperty("BodyExpression", $bindingFlags)
 
-        $kwStmt = Get-KeywordByName -Ast $ast -Name $keyword
+            $ast = [scriptblock]::Create("ScriptBlockBodyKeyword { }").Ast
 
-        $kwStmt.BodyExpression | Should BeOfType $("[System.Management.Automation.Language.$($bodyType)Ast]")
+            $kwStmt = $ast.Find({ $args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst]}, $true)
+
+            $bodyProperty.GetValue($kwStmt).StaticType
+        }
+
+        Get-ScriptBlockResultInNewProcess -TestDrive $TestDrive -ModuleNames "BodyModeDsl" -Command $sb | Should Be "System.Management.Automation.ScriptBlock"
     }
 
-    It "does not parse scriptblock as body" {
-        $ast = [scriptblock]::Create("CommandBodyKeyword { foo }").Ast
+    It "Hashtable keyword has Hashtable body" {
+        $sb = {
+            $null = [scriptblock]::Create("using module BodyModeDsl").Invoke()
 
-        $kwStmt = Get-KeywordByName -Ast $ast -Name "CommandBodyKeyword"
+            $bindingFlags = [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Instance
+            $bodyProperty = [System.Management.Automation.Language.DynamicKeywordStatementAst].GetProperty("BodyExpression", $bindingFlags)
 
-        $kwStmt.BodyExpression | Should Be $null
+            $ast = [scriptblock]::Create("HashtableBodyKeyword { }").Ast
+
+            $kwStmt = $ast.Find({ $args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst]}, $true)
+
+            $bodyProperty.GetValue($kwStmt).StaticType
+        }
+
+        Get-ScriptBlockResultInNewProcess -TestDrive $TestDrive -ModuleNames "BodyModeDsl" -Command $sb | Should Be "System.Collections.Hashtable"
     }
-    #>
+
+    It "Command keyword has no body" {
+        $sb = {
+            $null = [scriptblock]::Create("using module BodyModeDsl").Invoke()
+
+            $bindingFlags = [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Instance
+            $bodyProperty = [System.Management.Automation.Language.DynamicKeywordStatementAst].GetProperty("BodyExpression", $bindingFlags)
+
+            $ast = [scriptblock]::Create("CommandBodyKeyword { }").Ast
+
+            $kwStmt = $ast.Find({ $args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst]}, $true)
+
+            $bodyProperty.GetValue($kwStmt).StaticType
+        }
+
+        Get-ScriptBlockResultInNewProcess -TestDrive $TestDrive -ModuleNames "BodyModeDsl" -Command $sb | Should Be $null
+    }
 }
 
 Describe "Full DSL example loads into AST" -Tags "CI" {

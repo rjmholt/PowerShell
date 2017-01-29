@@ -50,9 +50,11 @@ Describe "Basic DSL addition to runtime namespace" -Tags "CI" {
     }
 
     It "imports the top level DSL keyword into the DynamicKeyword namespace" {
-        $expression = Get-TopLevelKeywordsStr -KeywordNames $moduleName
-        $kwDict = Get-ExpressionFromModuleInNewContext -TestDrive $TestDrive -ModuleNames $moduleName -Expression $expression
-        $kwDict.$moduleName.Keyword | Should Be $moduleName
+        $kw = Get-ScriptBlockResultInNewProcess -TestDrive $TestDrive -Modules $moduleName -Command {
+            $null = [scriptblock]::Create("using module BasicDsl").Invoke()
+            [System.Management.Automation.Language.DynamicKeyword]::GetKeyword("BasicDsl")
+        }
+        $kw.Keyword | Should Be "BasicDsl"
     }
 }
 
@@ -90,7 +92,7 @@ Describe "Adding syntax modes to the DynamicKeyword datastructure" -Tags "CI" {
                           "MixedModeKeyword"
                          )
         $expression = Get-TopLevelKeywordsStr -KeywordNames $keywordNames
-        $kwDict = Get-ExpressionFromModuleInNewContext -TestDrive $TestDrive -ModuleNames $moduleNames -Expression $expression
+        $kwDict = Get-ExpressionFromModuleInNewProcess -TestDrive $TestDrive -ModuleNames $moduleNames -Expression $expression
     }
 
     AfterAll {
@@ -120,7 +122,7 @@ Describe "Adding properties to DynamicKeyword datastructures" -Tags "CI" {
         $keywordName = "PropertyKeyword"
 
         $expression = Get-TopLevelKeywordsStr -KeywordNames $keywordName
-        $kwDict = Get-ExpressionFromModuleInNewContext -TestDrive $TestDrive -ModuleNames $moduleName -Prelude $serialization -Expression $expression
+        $kwDict = Get-ExpressionFromModuleInNewProcess -TestDrive $TestDrive -ModuleNames $moduleName -Prelude $serialization -Expression $expression
     }
 
     AfterAll {
@@ -161,7 +163,7 @@ Describe "Adding parameters to DynamicKeyword datastructures" -Tags "CI" {
         $keywordName = "ParameterKeyword"
 
         $expression = Get-TopLevelKeywordsStr -KeywordNames $keywordName
-        $kwDict = Get-ExpressionFromModuleInNewContext -TestDrive $TestDrive -ModuleNames $moduleNAme -Expression $expression
+        $kwDict = Get-ExpressionFromModuleInNewProcess -TestDrive $TestDrive -ModuleNames $moduleNAme -Expression $expression
     }
 
     AfterAll {
@@ -208,7 +210,7 @@ Describe "Adding nested keywords to a DynamicKeyword" -Tags "CI" {
         $nesting = "Update-TypeData -SerializationDepth 7 -TypeName System.Management.Automation.Language.DynamicKeyword" 
 
         $expression = Get-TopLevelKeywordsStr -KeywordNames $topKeywordName
-        $kw = (Get-ExpressionFromModuleInNewContext -TestDrive $TestDrive -ModuleNames $moduleName -Prelude $nesting -Expression $expression).$topKeywordName
+        $kw = (Get-ExpressionFromModuleInNewProcess -TestDrive $TestDrive -ModuleNames $moduleName -Prelude $nesting -Expression $expression).$topKeywordName
     }
 
     AfterAll {
