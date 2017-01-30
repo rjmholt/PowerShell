@@ -95,14 +95,11 @@ Describe "Basic DSL syntax loading into AST" -Tags "CI" {
         $keyword = Get-ScriptBlockResultInNewProcess -TestDrive $TestDrive -ModuleNames "BasicDsl" -Command {
             $null = [scriptblock]::Create("using module BasicDsl").Invoke()
 
-            $bindingFlags = [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Instance
-            $keywordProperty = [System.Management.Automation.Language.DynamicKeywordStatementAst].GetProperty("Keyword", $bindingFlags)
-
             $ast = [scriptblock]::Create("BasicDsl").Ast.Find({
                 $args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst]
             }, $true)
 
-            $keywordProperty.GetValue($ast)
+            $ast.Keyword
         }
     }
 

@@ -444,7 +444,7 @@ namespace System.Management.Automation.Language
                 }
                 else if (moduleInfo != null && moduleInfo.Count > 0)
                 {
-                    // it's ok, if we get more then one module. They are already sorted in the right order
+                    // it's ok if we get more then one module. They are already sorted in the right order
                     // we just need to use the first one
 
                     // We must add the same objects (in sense of object refs) to usingStatementAst typeTable and to symbolTable.

@@ -462,6 +462,7 @@ namespace System.Management.Automation.Language
             foreach (var typeDefHandle in _metadataReader.TypeDefinitions)
             {
                 var typeDef = _metadataReader.GetTypeDefinition(typeDefHandle);
+                // Make sure this keyword is not nested (declared as an inner class)
                 var declaringType = typeDef.GetDeclaringType();
                 if (declaringType.IsNil && IsKeywordSpecification(typeDef))
                 {
@@ -574,6 +575,23 @@ namespace System.Management.Automation.Language
 
         private bool IsKeywordSpecification(TypeDefinition typeDef)
         {
+            // Ensure the keyword inherits from System.Management.Automation.Language.Keyword
+            EntityHandle baseTypeHandle = typeDef.BaseType;
+            switch (baseTypeHandle.Kind)
+            {
+                case HandleKind.TypeReference:
+                    TypeReference typeRef = _metadataReader.GetTypeReference((TypeReferenceHandle)baseTypeHandle);
+                    if (typeof(Keyword).Name != _metadataReader.GetString(typeRef.Name) && typeof(Keyword).Namespace != _metadataReader.GetString(typeRef.Namespace))
+                    {
+                        return false;
+                    }
+                    break;
+
+                default:
+                    return false;
+            }
+
+            // Ensure the keyword is annotated with the KeywordAttribute
             foreach (CustomAttributeHandle caHandle in typeDef.GetCustomAttributes())
             {
                 CustomAttribute customAttribute = _metadataReader.GetCustomAttribute(caHandle);

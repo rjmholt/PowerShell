@@ -4564,31 +4564,44 @@ namespace System.Management.Automation.Language
             }
 
             // Import any DSL modules defined in DLLs for parse-time inclusion
-            Exception moduleImportException;
+            Exception moduleImportException; // Currently unused
             bool isWildcard; // Unused
             bool isConstant; // Unused
             Collection<PSModuleInfo> moduleInfos = GetModulesFromUsingModule(usingStmtAst, out moduleImportException, out isWildcard, out isConstant);
-            if (moduleInfos != null)
+            if (!isConstant)
             {
-                foreach (var module in moduleInfos)
+                ReportError(usingStmtAst.Extent, () => ParserStrings.RequiresArgumentMustBeConstant);
+            }
+            else if (moduleImportException != null)
+            {
+                // we re-using RequiresModuleInvalid string, semantic is very similar so it's fine to do that.
+                ReportError(usingStmtAst.Extent, () => ParserStrings.RequiresModuleInvalid, moduleImportException.Message);
+            }
+            else if (isWildcard)
+            {
+                ReportError(usingStmtAst.Extent, () => ParserStrings.WildCardModuleNameError);
+            }
+            // GetModulesFromUsingModule returns a list of matching modules down the module path, so just take the first
+            if (moduleInfos != null && moduleInfos.Count > 0)
+            {
+                var module = moduleInfos[0];
+                // Try and read the module as an assembly, and ignore it if it isn't
+                if (module.Path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Try and read the module as an assembly, and ignore it if it isn't
-                    if (module.Path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                    try
                     {
-                        try
-                        {
-                            ClrFacade.GetAssemblyName(module.Path);
-                        }
-                        catch (BadImageFormatException)
-                        {
-                            continue;
-                        }
+                        ClrFacade.GetAssemblyName(module.Path);
+                    }
+                    catch (BadImageFormatException)
+                    {
+                        // If the DLL read is bad, just import the AST and let the symbol resolver work it out
+                        return usingStmtAst;
+                    }
 
-                        var dslReader = new DslDllModuleMetadataReader(module);
-                        foreach (var keyword in dslReader.ReadDslSpecification())
-                        {
-                            DynamicKeyword.AddKeyword(keyword);
-                        }
+                    var dslReader = new DslDllModuleMetadataReader(module);
+                    foreach (var keyword in dslReader.ReadDslSpecification())
+                    {
+                        DynamicKeyword.AddKeyword(keyword);
                     }
                 }
             }
