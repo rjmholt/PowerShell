@@ -8,7 +8,8 @@ $references = @(
 
 $assetPath = Join-Path $PSScriptRoot 'assets'
 
-$powershellExecutable = Join-Path -Path $PSHOME -ChildPath "powershell.exe"
+$executableName = if ($IsWindows) { "powershell.exe" } else { "powershell" }
+$powershellExecutable = Join-Path -Path $PSHOME -ChildPath $executableName
 
 function Get-TestDrivePathString
 {
