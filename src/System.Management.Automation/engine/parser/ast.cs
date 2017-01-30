@@ -7019,6 +7019,9 @@ namespace System.Management.Automation.Language
 
         #region Internal Properties/Methods
 
+        /// <summary>
+        /// The DynamicKeyword invoking this StatementAst
+        /// </summary>
         public DynamicKeyword Keyword
         {
             get
