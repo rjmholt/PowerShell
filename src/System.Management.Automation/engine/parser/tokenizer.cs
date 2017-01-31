@@ -331,42 +331,55 @@ namespace System.Management.Automation.Language
         #endregion
 
         /// <summary>
+        /// Empty default constructor for DynamicKeyword
+        /// </summary>
+        public DynamicKeyword()
+        {
+            // TODO: This should be made to build a complete DynamicKeyword
+        }
+
+        /// <summary>
+        /// Copy constructor for a DynamicKeyword
+        /// </summary>
+        /// <param name="other">the keyword to copy</param>
+        public DynamicKeyword(DynamicKeyword other)
+        {
+            ImplementingModule = other.ImplementingModule;
+            ImplementingModuleVersion = other.ImplementingModuleVersion;
+            Keyword = other.Keyword;
+            ResourceName = other.ResourceName;
+            BodyMode = other.BodyMode;
+            UseMode = other.UseMode;
+            DirectCall = other.DirectCall;
+            NameMode = other.NameMode;
+            MetaStatement = other.MetaStatement;
+            IsReservedKeyword = other.IsReservedKeyword;
+            HasReservedProperties = other.HasReservedProperties;
+            PreParse = other.PreParse;
+            PostParse = other.PostParse;
+            SemanticCheck = other.SemanticCheck;
+            RuntimeCall = other.RuntimeCall;
+            foreach (KeyValuePair<string, DynamicKeywordProperty> entry in other.Properties)
+            {
+                Properties.Add(entry.Key, new DynamicKeywordProperty(entry.Value));
+            }
+            foreach (KeyValuePair<string, DynamicKeywordParameter> entry in other.Parameters)
+            {
+                Parameters.Add(entry.Key, new DynamicKeywordParameter(entry.Value));
+            }
+            foreach (KeyValuePair<string, DynamicKeyword> entry in other.InnerKeywords)
+            {
+                InnerKeywords.Add(entry.Key, new DynamicKeyword(entry.Value));
+            }
+        }
+
+        /// <summary>
         /// Duplicates the DynamicKeyword
         /// </summary>
         /// <returns>A copy of the DynamicKeyword</returns>
-        public DynamicKeyword Copy()
+        public virtual DynamicKeyword Copy()
         {
-            DynamicKeyword keyword = new DynamicKeyword()
-            {
-                ImplementingModule = this.ImplementingModule,
-                ImplementingModuleVersion = this.ImplementingModuleVersion,
-                Keyword = this.Keyword,
-                ResourceName = this.ResourceName,
-                BodyMode = this.BodyMode,
-                UseMode = this.UseMode,
-                DirectCall = this.DirectCall,
-                NameMode = this.NameMode,
-                MetaStatement = this.MetaStatement,
-                IsReservedKeyword = this.IsReservedKeyword,
-                HasReservedProperties = this.HasReservedProperties,
-                PreParse = this.PreParse,
-                PostParse = this.PostParse,
-                SemanticCheck = this.SemanticCheck,
-                RuntimeCall = this.RuntimeCall
-            };
-            foreach (KeyValuePair<string, DynamicKeywordProperty> entry in this.Properties)
-            {
-                keyword.Properties.Add(entry.Key, entry.Value);
-            }
-            foreach (KeyValuePair<string, DynamicKeywordParameter> entry in this.Parameters)
-            {
-                keyword.Parameters.Add(entry.Key, entry.Value);
-            }
-            foreach (KeyValuePair<string, DynamicKeyword> entry in this.InnerKeywords)
-            {
-                keyword.InnerKeywords.Add(entry.Key, entry.Value);
-            }
-            return keyword;
+            return new DynamicKeyword(this);
         }
 
         /// <summary>
@@ -546,6 +559,29 @@ namespace System.Management.Automation.Language
     public class DynamicKeywordProperty
     {
         /// <summary>
+        /// Empty default constructor
+        /// </summary>
+        public DynamicKeywordProperty()
+        {
+        }
+
+        /// <summary>
+        /// Copy constructor
+        /// </summary>
+        /// <param name="other">the property to copy</param>
+        public DynamicKeywordProperty(DynamicKeywordProperty other)
+        {
+            Name = other.Name;
+            TypeConstraint = other.TypeConstraint;
+            _attributes = new List<string>(other.Attributes);
+            _values = new List<string>(other.Values);
+            _valueMap = new Dictionary<string, string>(other.ValueMap);
+            Mandatory = other.Mandatory;
+            IsKey = other.IsKey;
+            Range = other.Range;
+        }
+
+        /// <summary>
         /// The name of the property
         /// </summary>
         public string Name { get; set; }
@@ -605,6 +641,23 @@ namespace System.Management.Automation.Language
     /// </summary>
     public class DynamicKeywordParameter : DynamicKeywordProperty
     {
+        /// <summary>
+        /// Empty default constructor
+        /// </summary>
+        public DynamicKeywordParameter()
+        {
+        }
+
+        /// <summary>
+        /// Copy constructor
+        /// </summary>
+        /// <param name="other">the parameter to copy</param>
+        public DynamicKeywordParameter(DynamicKeywordParameter other) : base (other)
+        {
+            Switch = other.Switch;
+            Position = other.Position;
+        }
+
         /// <summary>
         /// Type if this is a switch parameter and takes no argument
         /// </summary>
