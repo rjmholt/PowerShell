@@ -2854,6 +2854,11 @@ namespace System.Management.Automation.Language
                 return Expression.Empty();
             }
 
+            if (dynamicKeywordAst.Keyword.RuntimeCall != null)
+            {
+                return Expression.Lambda<Func<DynamicKeywordStatementAst, object>>(Expression.Call(dynamicKeywordAst.Keyword.RuntimeCall.GetMethodInfo()));
+            }
+
             return this.VisitPipeline(dynamicKeywordAst.GenerateCommandCallPipelineAst());
         }
 

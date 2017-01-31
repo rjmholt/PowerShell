@@ -1,3 +1,5 @@
+using System;
+using System.Management.Automation;
 using System.Management.Automation.Language;
 using System.Collections.ObjectModel;
 
@@ -9,8 +11,9 @@ public class SimpleRuntimeKeyword : Keyword
         RuntimeCall = TestExecution;
     }
 
-    private static ICollection<PSObject> TestExecution(DynamicKeywordStatementAst statementAst)
+    private static Collection<object> TestExecution(DynamicKeywordStatementAst statementAst)
     {
-        throw new Exception("SimpleRuntimeKeywordTest");
+        Console.WriteLine("Hello Friends!");
+        return null;
     }
 }

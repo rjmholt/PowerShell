@@ -7045,7 +7045,9 @@ namespace System.Management.Automation.Language
         internal PipelineAst GenerateCommandCallPipelineAst()
         {
             if (_commandCallPipelineAst != null)
+            {
                 return _commandCallPipelineAst;
+            }
 
             /////////////////////////////////////////////////////////////////////////
             //
@@ -7189,7 +7191,7 @@ namespace System.Management.Automation.Language
                             typeof(System.Management.Automation.Language.DynamicKeyword).FullName)),
                     new StringConstantExpressionAst(
                         FunctionName.Extent,
-                        "GetKeyword",
+                        "GetKeywordInScope",
                         StringConstantType.BareWord),
                     new List<ExpressionAst>
                         {
@@ -7200,7 +7202,7 @@ namespace System.Management.Automation.Language
                         },
                     true);
 
-                // Keyword may not be followed by a curly brace
+                // Keyword may not be followed by a curly brace, so default to FunctionName to prevent null dereference
                 Token errorToken = LCurly ?? FunctionName;
 
                 cea.Add(

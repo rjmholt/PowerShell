@@ -69,7 +69,7 @@ namespace System.Management.Automation.Language
         /// <summary>
         /// Specifies the call to be made at runtime for the keyword invocation
         /// </summary>
-        public Func<DynamicKeywordStatementAst, Collection<PSObject>> RuntimeCall
+        public Func<DynamicKeywordStatementAst, object> RuntimeCall
         {
             get; set;
         }
@@ -404,11 +404,13 @@ namespace System.Management.Automation.Language
         /// spits out an array of the top level keywords defined in it
         /// </summary>
         /// <returns>an array of the top level DynamicKeywords defined in the module</returns>
-        public IEnumerable<DynamicKeyword> ReadDslSpecification()
+        public IDictionary<string, DynamicKeyword> ReadDslSpecification()
         {
             // TODO: Ensure the module is a DLL, else return null
 
-            using (var stream = File.OpenRead(_moduleInfo.Path))
+            IDictionary<string, DynamicKeyword> globalKeywords;
+
+            using (FileStream stream = File.OpenRead(_moduleInfo.Path))
             using (var peReader = new PEReader(stream))
             {
                 if (!peReader.HasMetadata)
@@ -420,13 +422,23 @@ namespace System.Management.Automation.Language
 
                 try
                 {
-                    return ReadGlobalDynamicKeywords();
+                    globalKeywords =  ReadGlobalDynamicKeywords();
                 }
                 catch (Exception e)
                 {
                     throw new RuntimeException(e.GetType().ToString() + "|" + e.Message + "|" + e.StackTrace, e);
                 }
             }
+
+            // TODO: Move this somewhere later in the interpreter
+            // TODO: Find out if reusing a readonly FileStream is acceptable/feasibly
+            using (FileStream stream = File.OpenRead(_moduleInfo.Path))
+            {
+                Assembly dslDefinitionAsm = ClrFacade.LoadFrom(stream);
+                ReadGlobalKeywordFunctions(globalKeywords, dslDefinitionAsm);
+            }
+
+            return globalKeywords;
         }
 
         private TypingTypeProvider TypeLookupProvider
@@ -455,9 +467,9 @@ namespace System.Management.Automation.Language
         /// by recursive descent.
         /// </summary>
         /// <returns>an array of the top level keywords defined in the DLL</returns>
-        private IEnumerable<DynamicKeyword> ReadGlobalDynamicKeywords()
+        private IDictionary<string, DynamicKeyword> ReadGlobalDynamicKeywords()
         {
-            var globalKeywordList = new List<DynamicKeyword>();
+            var globalKeywords = new Dictionary<string, DynamicKeyword>();
 
             foreach (var typeDefHandle in _metadataReader.TypeDefinitions)
             {
@@ -466,11 +478,12 @@ namespace System.Management.Automation.Language
                 var declaringType = typeDef.GetDeclaringType();
                 if (declaringType.IsNil && IsKeywordSpecification(typeDef))
                 {
-                    globalKeywordList.Add(ReadKeywordSpecification(typeDef));
+                    DynamicKeyword keyword = ReadKeywordSpecification(typeDef);
+                    globalKeywords.Add(keyword.Keyword, keyword);
                 }
             }
 
-            return globalKeywordList;
+            return globalKeywords;
         }
 
         /// <summary>
@@ -722,6 +735,39 @@ namespace System.Management.Automation.Language
                         break;
                 }
             }
+        }
+
+        private void ReadGlobalKeywordFunctions(IDictionary<string, DynamicKeyword> globalKeywords, Assembly definingAssembly)
+        {
+            foreach (var typeDef in definingAssembly.DefinedTypes)
+            {
+                if (globalKeywords.ContainsKey(typeDef.Name))
+                {
+                    ReadKeywordFunctions(globalKeywords[typeDef.Name], typeDef);
+                }
+            }
+        }
+
+        private void ReadKeywordFunctions(DynamicKeyword keyword, TypeInfo typeDefintion)
+        {
+            foreach (var innerKeyword in keyword.InnerKeywords.Values)
+            {
+                TypeInfo nestedType = typeDefintion.GetDeclaredNestedType(innerKeyword.Keyword);
+                if (nestedType != null)
+                {
+                    ReadKeywordFunctions(innerKeyword, nestedType);
+                }
+                else
+                {
+                    // TODO: Throw something about expecting a type that was not found
+                }
+            }
+
+            Keyword keywordDefinition = (Keyword) Activator.CreateInstance(typeDefintion.AsType());
+            keyword.PreParse = keywordDefinition.PreParse;
+            keyword.PostParse = keywordDefinition.PostParse;
+            keyword.SemanticCheck = keywordDefinition.SemanticCheck;
+            keyword.RuntimeCall = keywordDefinition.RuntimeCall;
         }
 
         private interface IGenericContext<TType>

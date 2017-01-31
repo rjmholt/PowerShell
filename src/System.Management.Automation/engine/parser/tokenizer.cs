@@ -351,7 +351,8 @@ namespace System.Management.Automation.Language
                 HasReservedProperties = this.HasReservedProperties,
                 PreParse = this.PreParse,
                 PostParse = this.PostParse,
-                SemanticCheck = this.SemanticCheck
+                SemanticCheck = this.SemanticCheck,
+                RuntimeCall = this.RuntimeCall
             };
             foreach (KeyValuePair<string, DynamicKeywordProperty> entry in this.Properties)
             {
@@ -484,6 +485,12 @@ namespace System.Management.Automation.Language
         /// A custom function that checks semantic for the given <see cref="DynamicKeywordStatementAst"/>
         /// </summary>
         public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck { get; set; }
+
+        /// <summary>
+        /// A custom function that determines the behavior of the DynamicKeyword when invoked at runtime, if set.
+        /// This overrides the "ImplementingModule\KeywordName" function definition mechanism, if set.
+        /// </summary>
+        public Func<DynamicKeywordStatementAst, object> RuntimeCall { get; set; }
     }
 
 

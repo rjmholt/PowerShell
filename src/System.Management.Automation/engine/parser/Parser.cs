@@ -4599,7 +4599,7 @@ namespace System.Management.Automation.Language
                     }
 
                     var dslReader = new DslDllModuleMetadataReader(module);
-                    foreach (var keyword in dslReader.ReadDslSpecification())
+                    foreach (var keyword in dslReader.ReadDslSpecification().Values)
                     {
                         DynamicKeyword.AddKeyword(keyword);
                     }
