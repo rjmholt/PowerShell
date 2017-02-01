@@ -2856,7 +2856,32 @@ namespace System.Management.Automation.Language
 
             if (dynamicKeywordAst.Keyword.RuntimeCall != null)
             {
-                return Expression.Lambda<Func<DynamicKeywordStatementAst, object>>(Expression.Call(dynamicKeywordAst.Keyword.RuntimeCall.GetMethodInfo()));
+                // TODO: Make this work in a reasonable way
+
+                Expression<Func<DynamicKeywordStatementAst, object>> runtimeFunc = x => dynamicKeywordAst.Keyword.RuntimeCall(x);
+                Expression runtimeInvocation = Expression.Invoke(runtimeFunc, Expression.Constant(dynamicKeywordAst));
+
+                var keywordStatements = new List<Expression>(new[] { CallAddPipe(runtimeInvocation, s_getCurrentPipe) });
+
+                foreach (var innerKeywordAst in dynamicKeywordAst.FindAll(ast => ast is DynamicKeywordStatementAst && ast != dynamicKeywordAst, true))
+                {
+                    var innerAst = innerKeywordAst as DynamicKeywordStatementAst;
+                    if (innerAst == null)
+                    {
+                        continue;
+                    }
+
+                    Expression innerInvocation = VisitDynamicKeywordStatement(innerAst) as Expression;
+                    if (innerInvocation == null)
+                    {
+                        continue;
+                    }
+
+                    keywordStatements.Add(innerInvocation);
+                }
+
+
+                return Expression.Block(keywordStatements);
             }
 
             return this.VisitPipeline(dynamicKeywordAst.GenerateCommandCallPipelineAst());

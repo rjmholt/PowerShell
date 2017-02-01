@@ -17,6 +17,11 @@ public class TypeExtension : Keyword
         //   -Name <string> -ScriptMethod <ScriptBlock> -- add a method defined by a scriptblock
         //   -Name <string> -CodeReference <string>     -- add a method aliasing an existing C# method
 
+        public Method()
+        {
+            SemanticCheck = CheckParameters;
+        }
+
         [KeywordParameter(Position = 0, Mandatory = true)]
         public string Name { get; set; }
 
@@ -60,6 +65,11 @@ public class TypeExtension : Keyword
             }
 
             return null;
+        }
+
+        private static void AddScriptMethod(Type extendedType, string methodName, ScriptBlock methodBody)
+        {
+
         }
     }
 
