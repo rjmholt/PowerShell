@@ -77,7 +77,7 @@ public class OuterRuntimeKeyword : Keyword
 {
     public OuterRuntimeKeyword()
     {
-        RuntimeCall = (keywordAst) => {
+        RuntimeCall = keywordAst => {
             return "I'm outside";
         };
     }
@@ -87,9 +87,32 @@ public class OuterRuntimeKeyword : Keyword
     {
         public InnerRuntimeKeyword()
         {
-            RuntimeCall = (keywordAst) => {
+            RuntimeCall = keywordAst => {
                 return "I'm inside";
             };
         }
+    }
+}
+
+public class MyData
+{
+    public int Count { get; }
+    public string Name { get; }
+
+    public MyData(int count, string name)
+    {
+        Count = count;
+        Name = name;
+    }
+}
+
+[Keyword()]
+public class CustomTypeKeyword : Keyword
+{
+    public CustomTypeKeyword()
+    {
+        RuntimeCall = keywordAst => {
+            return new MyData(7, "Hello");
+        };
     }
 }

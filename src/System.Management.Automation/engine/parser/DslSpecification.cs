@@ -737,6 +737,11 @@ namespace System.Management.Automation.Language
             }
         }
 
+        /// <summary>
+        /// Read in semantic calls on globally scoped keywords
+        /// </summary>
+        /// <param name="globalKeywords">the global keywords to add functions to</param>
+        /// <param name="definingAssembly">the assembly that defines the keyword specifications</param>
         private void ReadGlobalKeywordFunctions(IDictionary<string, DynamicKeyword> globalKeywords, Assembly definingAssembly)
         {
             foreach (var typeDef in definingAssembly.DefinedTypes)
@@ -748,6 +753,11 @@ namespace System.Management.Automation.Language
             }
         }
 
+        /// <summary>
+        /// Read in the semantic calls on a Keyword specification to attach to a DynamicKeyword
+        /// </summary>
+        /// <param name="keyword">the DynamicKeyword to add runtime calls to</param>
+        /// <param name="typeDefintion">the info class of the Keyword specification to load from</param>
         private void ReadKeywordFunctions(DynamicKeyword keyword, TypeInfo typeDefintion)
         {
             foreach (var innerKeyword in keyword.InnerKeywords.Values)

@@ -2861,16 +2861,18 @@ namespace System.Management.Automation.Language
                 Expression<Func<DynamicKeywordStatementAst, object>> runtimeFunc = x => dynamicKeywordAst.Keyword.RuntimeCall(x);
                 Expression runtimeInvocation = Expression.Invoke(runtimeFunc, Expression.Constant(dynamicKeywordAst));
 
-                var keywordStatements = new List<Expression>(new[] { CallAddPipe(runtimeInvocation, s_getCurrentPipe) });
+                var keywordStatements = new List<Expression>{ CallAddPipe(runtimeInvocation, s_getCurrentPipe) };
 
                 foreach (var innerKeywordAst in dynamicKeywordAst.FindAll(ast => ast is DynamicKeywordStatementAst && ast != dynamicKeywordAst, true))
                 {
                     var innerAst = innerKeywordAst as DynamicKeywordStatementAst;
                     if (innerAst == null)
                     {
+                        // This shouldn't really be reachable
                         continue;
                     }
 
+                    // TODO: We shouldn't assume inner dynamic keywords have to return an expression
                     Expression innerInvocation = VisitDynamicKeywordStatement(innerAst) as Expression;
                     if (innerInvocation == null)
                     {
