@@ -95,11 +95,9 @@ Describe "Basic DSL syntax loading into AST" -Tags "CI" {
         $keyword = Get-ScriptBlockResultInNewProcess -TestDrive $TestDrive -ModuleNames "BasicDsl" -Command {
             $null = [scriptblock]::Create("using module BasicDsl").Invoke()
 
-            $ast = [scriptblock]::Create("BasicDsl").Ast.Find({
+            [scriptblock]::Create("BasicDsl").Ast.Find({
                 $args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst]
             }, $true)
-
-            $ast.Keyword
         }
     }
 
@@ -108,7 +106,7 @@ Describe "Basic DSL syntax loading into AST" -Tags "CI" {
     }
 
     It "imports a minimal C# defined DSL into the AST" {
-        $keyword.Keyword | Should Be "BasicDsl"
+        $keyword.Keyword.Keyword | Should Be "BasicDsl"
     }
 }
 

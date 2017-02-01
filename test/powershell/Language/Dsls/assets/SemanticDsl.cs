@@ -62,7 +62,7 @@ public class SimpleSemanticKeyword : Keyword
         public SimpleSemanticCheckKeyword()
         {
             SemanticCheck = (dynamicKeywordStatementAst) => {
-                var error = new ParseError(Helper.EmptyExtent, "SuccessfulSemanticAction", "Successful SemanticCheck action");
+                var error = new ParseError(Helper.EmptyExtent, "SuccessfulSemanticCheck", "Successful SemanticCheck action");
                 return new [] { error };
             };
         }

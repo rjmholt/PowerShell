@@ -50,8 +50,6 @@ function Get-ScriptBlockResultInNewProcess
 
     $result = & $powershellExecutable -NoProfile -NonInteractive -OutputFormat XML -Command $Command -args $Arguments *>&1
 
-    Wait-Debugger
-
     if ($result -is [System.Object[]])
     {
         foreach ($obj in $result)

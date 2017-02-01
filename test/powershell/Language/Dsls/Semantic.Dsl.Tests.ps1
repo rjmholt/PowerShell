@@ -38,7 +38,7 @@ Describe "Execution of semantic actions" -Tags "CI" {
                 }
                 catch
                 {
-                    $errs[$phase] = $_.FullyQualifiedErrorId
+                    $errs[$phase] = $_.Exception.InnerException.Errors[0].ErrorId
                 }
             }
             $errs
@@ -90,7 +90,7 @@ Describe "Manipulation of AST/DynamicKeyword with semantic actions" -Tags "CI" {
                 }
                 catch
                 {
-                    $errs[$action] = $_.FullyQualifiedErrorId
+                    $errs[$action] = $_.Exception.InnerException.Errors[0].ErrorId
                 }
             }
             $errs
