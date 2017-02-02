@@ -75,196 +75,15 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// A default, convenience implementation for parameter resolution. Provided
-        /// so that keyword implementors do not need to always reimplement most likely
-        /// functionality.
+        /// Resolves a keyword command into Ast components
         /// </summary>
         /// <param name="kwAst">dynamic keyword statement ast node</param>
         /// <returns></returns>
-        protected virtual ParseError[] ResolveParameters(DynamicKeywordStatementAst kwAst)
+        protected StaticBindingResult ParameterResolutionHelper(DynamicKeywordStatementAst kwAst)
         {
-            IEnumerable<PropertyInfo> allKwParams = from p in this.GetType().GetProperties()
-                                                    where p.IsDefined(typeof(KeywordParameterAttribute))
-                                                    select p;
-
-            return ResolveParameters(kwAst, allKwParams);
-        }
-
-        /// <summary>
-        /// A parameter resolving method to set all properties in a given list, assuming they use
-        /// default property getter/setter implementations.
-        /// </summary>
-        /// <param name="kwAst">dynamic keyword statement ast node</param>
-        /// <param name="autoSetKeywords">the keywords to be set using this unclever method</param>
-        /// <returns>a list of errors encountered while parsing, or null on success</returns>
-        protected virtual ParseError[] ResolveParameters(DynamicKeywordStatementAst kwAst, IEnumerable<PropertyInfo> autoSetKeywords)
-        {
-            var errorList = new List<ParseError>();
-
             var commandElements = Ast.CopyElements(kwAst.CommandElements);
             var commandAst = new CommandAst(kwAst.Extent, commandElements, TokenKind.Unknown, null);
-            StaticBindingResult bindingResult = StaticParameterBinder.BindCommand(commandAst);
-
-            // Ensure we have values for the all parameters we are responsible for setting
-            if (IsMissingMandatoryParams(autoSetKeywords, bindingResult.BoundParameters, kwAst.Extent, errorList))
-            {
-                return errorList.ToArray();
-            }
-
-            // Try and set all the parameters that were passed in
-            foreach (KeyValuePair<string, ParameterBindingResult> binding in bindingResult.BoundParameters)
-            {
-                if (!TrySetNamedParam(binding, errorList) && !TrySetPositionalParam(autoSetKeywords, binding, errorList))
-                {
-                    errorList.Add(new ParseError(binding.Value.Value.Extent, "UnknownParameter", "The parameter at position " + binding.Key + " was not recognized"));
-                }
-            }
-
-            return errorList.ToArray();
-        }
-
-        /// <summary>
-        /// Checks that all mandatory parameters have been provided
-        /// </summary>
-        /// <param name="propertiesToSet">the properties the the caller intends to set</param>
-        /// <param name="boundParameters">the parameters bound in PowerShell</param>
-        /// <param name="extent">the extent of the keyword statement</param>
-        /// <param name="errorList">the list of errors so far</param>
-        /// <returns></returns>
-        protected bool IsMissingMandatoryParams(IEnumerable<PropertyInfo> propertiesToSet, Dictionary<string, ParameterBindingResult> boundParameters, IScriptExtent extent, List<ParseError> errorList)
-        {
-            bool hasMissing = false;
-            foreach (var propInfo in propertiesToSet)
-            {
-                var paramOptions = propInfo.GetCustomAttribute<KeywordParameterAttribute>();
-                if (paramOptions.Mandatory)
-                {
-                    if (!boundParameters.ContainsKey(propInfo.Name) && !boundParameters.ContainsKey(paramOptions.Position.ToString()))
-                    {
-                        hasMissing = true;
-                        errorList.Add(new ParseError(extent, "MissingParameter", "The parameter " + propInfo.Name + " was not provided"));
-                    }
-                }
-            }
-
-            return hasMissing;
-        }
-
-        /// <summary>
-        /// Attempt to set a bound parameter on the assumption it is bound to a position
-        /// </summary>
-        /// <param name="possibleParams">the parameters the positional parameter could correspond to</param>
-        /// <param name="boundParameter">the positional parameter binding</param>
-        /// <param name="errorList">the list of errors so far</param>
-        /// <returns>true if the value was set correctly, false otherwise</returns>
-        protected bool TrySetPositionalParam(IEnumerable<PropertyInfo> possibleParams, KeyValuePair<string, ParameterBindingResult> boundParameter, List<ParseError> errorList)
-        {
-            // Reject null parameters
-            if (possibleParams == null)
-            {
-                throw new ArgumentNullException("possibleParams");
-            }
-
-            if (errorList == null)
-            {
-                throw new ArgumentNullException("errorList");
-            }
-
-            // Attempt to parse the key as an int
-            int position;
-            if (!Int32.TryParse(boundParameter.Key, out position))
-            {
-                return false;
-            }
-
-            // Find the property corresponding to the position if one exists, and set it
-            PropertyInfo propInfo = possibleParams.FirstOrDefault(p => p.GetCustomAttribute<KeywordParameterAttribute>().Position == position);
-            if (propInfo == null)
-            {
-                return false;
-            }
-
-            return TrySetValue(propInfo, boundParameter.Value, errorList);
-        }
-
-        /// <summary>
-        /// Try to set a named parameter, assuming that the parameter key must be its name
-        /// </summary>
-        /// <param name="boundParameter">the bound parameter</param>
-        /// <param name="errorList">the list of errors so far</param>
-        /// <returns>true if the value was set correctly, false otherwise</returns>
-        protected bool TrySetNamedParam(KeyValuePair<string, ParameterBindingResult> boundParameter, List<ParseError> errorList)
-        {
-            // Reject null parameters
-            if (errorList == null)
-            {
-                throw new ArgumentNullException("errorList");
-            }
-
-            PropertyInfo propInfo = this.GetType().GetProperty(boundParameter.Key, BindingFlags.IgnoreCase);
-            if (propInfo == null)
-            {
-                return false;
-            }
-
-            return TrySetValue(propInfo, boundParameter.Value, errorList);
-        }
-
-        /// <summary>
-        /// Tries to set the property specified by property value to the
-        /// parameter-bound value in boundValue
-        /// </summary>
-        /// <param name="propInfo">metadata about the property being set</param>
-        /// <param name="boundValue">powershell bound parameter containing the value to set</param>
-        /// <param name="errorList">list of errors so far, to add to</param>
-        /// <returns>true if the value was set correctly, false otherwise</returns>
-        protected bool TrySetValue(PropertyInfo propInfo, ParameterBindingResult boundValue, List<ParseError> errorList)
-        {
-            // Reject null parameters
-            if (propInfo == null)
-            {
-                throw new ArgumentNullException("propInfo");
-            }
-
-            if (boundValue == null)
-            {
-                throw new ArgumentNullException("boundValue");
-            }
-
-            if (errorList == null)
-            {
-                throw new ArgumentNullException("errorList");
-            }
-
-            // Ensure the property is writeable
-            if (!propInfo.CanWrite)
-            {
-                errorList.Add(new ParseError(boundValue.Value.Extent, "UnwritableProperty", "The property " + propInfo.Name + " is not able to be written"));
-                return false;
-            }
-
-            // Try to resolve a value from the argument's Ast node
-            object astValue;
-            try
-            {
-                astValue = boundValue.Value.SafeGetValue();
-            }
-            catch (InvalidOperationException e)
-            {
-                errorList.Add(new ParseError(boundValue.Value.Extent, e.GetType().ToString(), e.Message));
-                return false;
-            }
-
-            // Try to coerce the value's type to that of the property
-            var value = Convert.ChangeType(astValue, propInfo.PropertyType);
-            if (value == null)
-            {
-                errorList.Add(new ParseError(boundValue.Value.Extent, "BadParameterType", "The parameter " + boundValue.Value.ToString() + " was of incorrect type"));
-                return false;
-            }
-
-            propInfo.SetValue(this, value);
-            return true;
+            return StaticParameterBinder.BindCommand(commandAst);
         }
     }
 
@@ -471,6 +290,10 @@ namespace System.Management.Automation.Language
         {
             var globalKeywords = new Dictionary<string, DynamicKeyword>();
 
+            // Read in any defined enums to helpfully resolve types for parameters
+            var enumDefStack = new Stack<Dictionary<string, List<string>>>();
+            enumDefStack.Push(ReadEnumDefinitions(_metadataReader.TypeDefinitions));
+
             foreach (var typeDefHandle in _metadataReader.TypeDefinitions)
             {
                 var typeDef = _metadataReader.GetTypeDefinition(typeDefHandle);
@@ -478,12 +301,47 @@ namespace System.Management.Automation.Language
                 var declaringType = typeDef.GetDeclaringType();
                 if (declaringType.IsNil && IsKeywordSpecification(typeDef))
                 {
-                    DynamicKeyword keyword = ReadKeywordSpecification(typeDef);
+                    DynamicKeyword keyword = ReadKeywordSpecification(enumDefStack, typeDef);
                     globalKeywords.Add(keyword.Keyword, keyword);
                 }
             }
 
             return globalKeywords;
+        }
+
+        /// <summary>
+        /// Read in any enum definitions at the current type definition level
+        /// </summary>
+        /// <param name="typeDefinitions"></param>
+        /// <returns></returns>
+        private Dictionary<string, List<string>> ReadEnumDefinitions(IEnumerable<TypeDefinitionHandle> typeDefinitions)
+        {
+            var enumDefs = new Dictionary<string, List<String>>();
+            foreach (var typeDefHandle in _metadataReader.TypeDefinitions)
+            {
+                var typeDef = _metadataReader.GetTypeDefinition(typeDefHandle);
+                switch (typeDef.BaseType.Kind)
+                {
+                    case HandleKind.TypeReference:
+                        var baseType = _metadataReader.GetTypeReference((TypeReferenceHandle)typeDef.BaseType);
+                        if (String.Join(".", _metadataReader.GetString(baseType.Namespace), _metadataReader.GetString(baseType.Name)) == "System.Enum")
+                        {
+                            var enumFields = new List<string>();
+                            foreach (FieldDefinitionHandle enumFieldHandle in typeDef.GetFields())
+                            {
+                                FieldDefinition field = _metadataReader.GetFieldDefinition(enumFieldHandle);
+                                string fieldName = _metadataReader.GetString(field.Name);
+                                if (fieldName != "value__")
+                                {
+                                    enumFields.Add(fieldName);
+                                }
+                            }
+                            enumDefs.Add(_metadataReader.GetString(typeDef.Name), enumFields);
+                        }
+                        break;
+                }
+            }
+            return enumDefs;
         }
 
         /// <summary>
@@ -493,11 +351,14 @@ namespace System.Management.Automation.Language
         /// </summary>
         /// <param name="typeDef">the type definition object for the keyword class to be parsed</param>
         /// <returns>the constructed DynamicKeyword from the parsed specification</returns>
-        private DynamicKeyword ReadKeywordSpecification(TypeDefinition typeDef)
+        private DynamicKeyword ReadKeywordSpecification(Stack<Dictionary<string, List<string>>> enumDefStack, TypeDefinition typeDef)
         {
+            // Read in enumerated types at the current level
+            enumDefStack.Push(ReadEnumDefinitions(typeDef.GetNestedTypes()));
+
+            // Set the generic context
             var genericTypeParameters = typeDef.GetGenericParameters()
                 .Select(h => _metadataReader.GetString(_metadataReader.GetGenericParameter(h).Name)).ToImmutableArray();
-
             var genericContext = new TypeNameGenericContext(genericTypeParameters, ImmutableArray<string>.Empty);
 
             // Read in all parameters and properties defined as class properties
@@ -508,15 +369,15 @@ namespace System.Management.Automation.Language
                 var property = _metadataReader.GetPropertyDefinition(propertyHandle);
                 foreach (var attributeHandle in property.GetCustomAttributes())
                 {
-                    var keywordParameterAttribute = _metadataReader.GetCustomAttribute(attributeHandle);
-                    if (IsKeywordParameterAttribute(keywordParameterAttribute))
+                    var keywordMemberAttribute = _metadataReader.GetCustomAttribute(attributeHandle);
+                    if (IsKeywordParameterAttribute(keywordMemberAttribute))
                     {
-                        keywordParameters.Add(ReadParameterSpecification(genericContext, property, keywordParameterAttribute));
+                        keywordParameters.Add(ReadParameterSpecification(enumDefStack, genericContext, property, keywordMemberAttribute));
                         break;
                     }
-                    else if (IsKeywordPropertyAttribute(keywordParameterAttribute))
+                    else if (IsKeywordPropertyAttribute(keywordMemberAttribute))
                     {
-                        keywordProperties.Add(ReadPropertySpecification(genericContext, property, keywordParameterAttribute));
+                        keywordProperties.Add(ReadPropertySpecification(enumDefStack, genericContext, property, keywordMemberAttribute));
                         break;
                     }
                 }
@@ -529,7 +390,7 @@ namespace System.Management.Automation.Language
                 var innerTypeDef = _metadataReader.GetTypeDefinition(innerTypeHandle);
                 if (IsKeywordSpecification(innerTypeDef))
                 {
-                    innerKeywords.Add(ReadKeywordSpecification(innerTypeDef));
+                    innerKeywords.Add(ReadKeywordSpecification(enumDefStack, innerTypeDef));
                 }
             }
 
@@ -567,6 +428,8 @@ namespace System.Management.Automation.Language
             {
                 keyword.InnerKeywords.Add(innerKeyword.Keyword, innerKeyword);
             }
+
+            enumDefStack.Pop();
 
             return keyword;
         }
@@ -624,7 +487,8 @@ namespace System.Management.Automation.Language
         /// <param name="keywordParameterAttribute">the attribute on the property declaring the parameter's properties (position, mandatory)</param>
         /// <param name="genericContext">the generic type context in which the property is used</param>
         /// <returns></returns>
-        private DynamicKeywordParameter ReadParameterSpecification(TypeNameGenericContext genericContext, PropertyDefinition property, CustomAttribute keywordParameterAttribute)
+        private DynamicKeywordParameter ReadParameterSpecification(Stack<Dictionary<string, List<string>>> enumDefStack,
+            TypeNameGenericContext genericContext, PropertyDefinition property, CustomAttribute keywordParameterAttribute)
         {
             string parameterName = _metadataReader.GetString(property.Name);
             string parameterType = property.DecodeSignature(TypeNameProvider, genericContext).ReturnType.ToString();
@@ -646,16 +510,19 @@ namespace System.Management.Automation.Language
                 }
             }
 
-            return new DynamicKeywordParameter()
+            var dkParameter = new DynamicKeywordParameter()
             {
                 Name = parameterName,
                 TypeConstraint = parameterType,
                 Position = position,
                 Mandatory = mandatory,
             };
+            TrySetMemberEnumType(dkParameter, enumDefStack);
+            return dkParameter;
         }
 
-        private DynamicKeywordProperty ReadPropertySpecification(TypeNameGenericContext genericContext, PropertyDefinition property, CustomAttribute keywordPropertyAttribute)
+        private DynamicKeywordProperty ReadPropertySpecification(Stack<Dictionary<string, List<string>>> enumDefStack,
+            TypeNameGenericContext genericContext, PropertyDefinition property, CustomAttribute keywordPropertyAttribute)
         {
             string propertyName = _metadataReader.GetString(property.Name);
             string propertyType = property.DecodeSignature(TypeNameProvider, genericContext).ReturnType;
@@ -672,12 +539,29 @@ namespace System.Management.Automation.Language
                 }
             }
 
-            return new DynamicKeywordProperty()
+            var dkProperty = new DynamicKeywordProperty()
             {
                 Name = propertyName,
                 TypeConstraint = propertyType,
                 Mandatory = mandatory,
             };
+            TrySetMemberEnumType(dkProperty, enumDefStack);
+            return dkProperty;
+        }
+
+        private bool TrySetMemberEnumType(DynamicKeywordProperty keywordProperty, Stack<Dictionary<string, List<string>>> enumDefStack)
+        {
+            string propertyType = keywordProperty.TypeConstraint;
+            foreach (var enumScope in enumDefStack)
+            {
+                if (enumScope.ContainsKey(propertyType))
+                {
+                    keywordProperty.Values.AddRange(enumScope[propertyType]);
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private bool IsAttributeOfType(CustomAttribute attribute, Type type)
