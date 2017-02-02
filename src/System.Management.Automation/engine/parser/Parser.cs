@@ -5722,14 +5722,21 @@ namespace System.Management.Automation.Language
                     default:
                         exprAst = new StringConstantExpressionAst(token.Extent, token.Text, StringConstantType.BareWord);
 
-                        // A command/argument that matches a keyword isn't really a keyword, so don't color it that way
-                        token.TokenFlags &= ~TokenFlags.Keyword;
+                        // A command/argument that matches a keyword isn't really a keyword unless it's a DynamicKeyword, so don't color it that way
+                        if (token.Kind != TokenKind.DynamicKeyword)
+                        {
+                            token.TokenFlags &= ~TokenFlags.Keyword;
+                        }
 
                         switch (context)
                         {
                             case CommandArgumentContext.CommandName:
                             case CommandArgumentContext.CommandNameAfterInvocationOperator:
-                                token.TokenFlags |= TokenFlags.CommandName;
+                                // Command-bodied DynamicKeywords should still be highlighted as keywords
+                                if (token.Kind != TokenKind.DynamicKeyword)
+                                {
+                                    token.TokenFlags |= TokenFlags.CommandName;
+                                }
                                 break;
                             case CommandArgumentContext.FileName:
                             case CommandArgumentContext.CommandArgument:

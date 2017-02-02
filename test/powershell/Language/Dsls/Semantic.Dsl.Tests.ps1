@@ -106,6 +106,7 @@ Describe "Manipulation of AST/DynamicKeyword with semantic actions" -Tags "CI" {
 
     It "Finds a string in the inner scriptblock and throws it in a ParseError using <action>" -TestCases $testCases {
         param($action, $keyword, $expected)
+        Wait-Debugger
         $errs.$action | Should Be $expected
     }
 
@@ -113,19 +114,16 @@ Describe "Manipulation of AST/DynamicKeyword with semantic actions" -Tags "CI" {
         $preParseSb = {
             $null = [scriptblock]::Create("using module SemanticDsl").Invoke()
 
-            $bindingFlags = [System.Reflection.BindingFlags]::NonPublic -bor [System.Reflection.BindingFlags]::Instance
-            $keywordProperty = [System.Management.Automation.Language.DynamicKeywordStatementAst].GetProperty("Keyword", $bindingFlags)
-
             $ast = [scriptblock]::Create("AstManipulationSemanticKeyword { AstManipulationPreParseKeyword }").Ast
-            $subAst = $ast.Find({
+            $keywordAst = $ast.Find({
                 $args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst] -and
-                $keywordProperty.GetValue($args[0]).Keyword -eq "AstManipulationPreParseKeyword"
+                $args[0].Keyword.Keyword -eq "AstManipulationPreParseKeyword"
             }, $true)
 
-            $keywordProperty.GetValue($subAst)
+            $keywordAst.Keyword
         }
 
         $keyword = Get-ScriptBlockResultInNewProcess -TestDrive $TestDrive -ModuleNames $moduleName -Command $preParseSb
-        $keyword.Properties.Contains("TestKeywordProperty") | Should Be $true
+        $keyword.Properties.TestKeywordProperty.Name | Should Be "TestKeywordProperty"
     }
 }

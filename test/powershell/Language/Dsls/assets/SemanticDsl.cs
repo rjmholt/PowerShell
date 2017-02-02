@@ -74,6 +74,7 @@ public class AstManipulationSemanticKeyword : Keyword
 {
     public AstManipulationSemanticKeyword()
     {
+        RuntimeCall = (kwAst) => null;
     }
 
     // This keyword actually just manipulates the DynamicKeyword data structure,
@@ -88,7 +89,10 @@ public class AstManipulationSemanticKeyword : Keyword
                 {
                     Name = "TestKeywordProperty"
                 };
-                dynamicKeyword.Properties.Add(dkProperty.Name, dkProperty);
+                if (!dynamicKeyword.Properties.ContainsKey("TestKeywordProperty"))
+                {
+                    dynamicKeyword.Properties.Add(dkProperty.Name, dkProperty);
+                }
                 return null;
             };
         }
