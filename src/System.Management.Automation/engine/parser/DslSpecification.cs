@@ -241,6 +241,8 @@ namespace System.Management.Automation.Language
         private readonly PSModuleInfo _moduleInfo;
 
         private MetadataReader _metadataReader;
+        private Stack<Dictionary<string, List<string>>> _enumDefStack;
+        private Stack<HashSet<string>> _keywordDefinitionStack;
 
         /// <summary>
         /// Construct a DLL reader from a PSModuleInfo object -- assuming it contains all needed info
@@ -271,15 +273,9 @@ namespace System.Management.Automation.Language
                 }
 
                 _metadataReader = peReader.GetMetadataReader();
-
-                try
-                {
-                    globalKeywords =  ReadGlobalDynamicKeywords();
-                }
-                catch (Exception e)
-                {
-                    throw new RuntimeException(e.GetType().ToString() + "|" + e.Message + "|" + e.StackTrace, e);
-                }
+                _enumDefStack = new Stack<Dictionary<string, List<string>>>();
+                _keywordDefinitionStack = new Stack<HashSet<string>>();
+                globalKeywords =  ReadGlobalDynamicKeywords();
             }
 
             // TODO: Move this somewhere later in the interpreter
@@ -324,9 +320,9 @@ namespace System.Management.Automation.Language
             var globalKeywords = new Dictionary<string, DynamicKeyword>();
 
             // Read in any defined enums to helpfully resolve types for parameters
-            var enumDefStack = new Stack<Dictionary<string, List<string>>>();
-            enumDefStack.Push(ReadEnumDefinitions(_metadataReader.TypeDefinitions));
+            _enumDefStack.Push(ReadEnumDefinitions(_metadataReader.TypeDefinitions));
 
+            _keywordDefinitionStack.Push(new HashSet<string>());
             foreach (var typeDefHandle in _metadataReader.TypeDefinitions)
             {
                 var typeDef = _metadataReader.GetTypeDefinition(typeDefHandle);
@@ -334,7 +330,12 @@ namespace System.Management.Automation.Language
                 var declaringType = typeDef.GetDeclaringType();
                 if (declaringType.IsNil && IsKeywordSpecification(typeDef))
                 {
-                    DynamicKeyword keyword = ReadKeywordSpecification(enumDefStack, typeDef);
+                    DynamicKeyword keyword = ReadKeywordSpecification(typeDef);
+                    if (keyword.UseMode != DynamicKeywordUseMode.OptionalMany)
+                    {
+                        // TODO: Make this error user-consumable
+                        throw new PSNotSupportedException("Specifying a restrictive use mode for global dynamic keywords is not supported");
+                    }
                     globalKeywords.Add(keyword.Keyword, keyword);
                 }
             }
@@ -383,12 +384,36 @@ namespace System.Management.Automation.Language
         /// recursive descent.
         /// </summary>
         /// <param name="typeDef">the type definition object for the keyword class to be parsed</param>
-        /// <param name="enumDefStack"></param>
         /// <returns>the constructed DynamicKeyword from the parsed specification</returns>
-        private DynamicKeyword ReadKeywordSpecification(Stack<Dictionary<string, List<string>>> enumDefStack, TypeDefinition typeDef)
+        private DynamicKeyword ReadKeywordSpecification(TypeDefinition typeDef)
         {
+            // Register the keyword name
+            string keywordName = _metadataReader.GetString(typeDef.Name);
+            foreach (var enclosingScope in _keywordDefinitionStack)
+            {
+                if (enclosingScope.Contains(keywordName))
+                {
+                    // TODO: Make this more PS-compatible for consumption by users
+                    throw new PSNotSupportedException("Cannot define two keywords of the same name in the same scope");
+                }
+            }
+            _keywordDefinitionStack.Peek().Add(keywordName);
+
+            // Read the custom keyword properties
+            DynamicKeywordBodyMode bodyMode = DynamicKeywordBodyMode.Command;
+            DynamicKeywordUseMode useMode = DynamicKeywordUseMode.OptionalMany;
+            foreach (var keywordAttributeHandle in typeDef.GetCustomAttributes())
+            {
+                var keywordAttribute = _metadataReader.GetCustomAttribute(keywordAttributeHandle);
+                if (IsKeywordAttribute(keywordAttribute))
+                {
+                    SetKeywordAttributeParameters(keywordAttribute, out bodyMode, out useMode);
+                    break;
+                }
+            }
+
             // Read in enumerated types at the current level
-            enumDefStack.Push(ReadEnumDefinitions(typeDef.GetNestedTypes()));
+            _enumDefStack.Push(ReadEnumDefinitions(typeDef.GetNestedTypes()));
 
             // Set the generic context
             var genericTypeParameters = typeDef.GetGenericParameters()
@@ -406,43 +431,36 @@ namespace System.Management.Automation.Language
                     var keywordMemberAttribute = _metadataReader.GetCustomAttribute(attributeHandle);
                     if (IsKeywordParameterAttribute(keywordMemberAttribute))
                     {
-                        keywordParameters.Add(ReadParameterSpecification(enumDefStack, genericContext, property, keywordMemberAttribute));
+                        keywordParameters.Add(ReadParameterSpecification(genericContext, property, keywordMemberAttribute));
                         break;
                     }
                     else if (IsKeywordPropertyAttribute(keywordMemberAttribute))
                     {
-                        keywordProperties.Add(ReadPropertySpecification(enumDefStack, genericContext, property, keywordMemberAttribute));
+                        keywordProperties.Add(ReadPropertySpecification(genericContext, property, keywordMemberAttribute));
                         break;
                     }
                 }
             }
 
             // Read in all nested keywords below this one
+            _keywordDefinitionStack.Push(new HashSet<string>());
             List<DynamicKeyword> innerKeywords = new List<DynamicKeyword>();
             foreach (var innerTypeHandle in typeDef.GetNestedTypes())
             {
                 var innerTypeDef = _metadataReader.GetTypeDefinition(innerTypeHandle);
                 if (IsKeywordSpecification(innerTypeDef))
                 {
-                    innerKeywords.Add(ReadKeywordSpecification(enumDefStack, innerTypeDef));
+                    if (bodyMode == DynamicKeywordBodyMode.Command)
+                    {
+                        // TODO: Make this more user-consumable
+                        throw new PSNotSupportedException("Cannot define keywords underneath a command-body keyword");
+                    }
+                    innerKeywords.Add(ReadKeywordSpecification(innerTypeDef));
                 }
             }
-
-            // Read the custom keyword properties
-            DynamicKeywordBodyMode bodyMode = DynamicKeywordBodyMode.Command;
-            DynamicKeywordUseMode useMode = DynamicKeywordUseMode.OptionalMany;
-            foreach (var keywordAttributeHandle in typeDef.GetCustomAttributes())
-            {
-                var keywordAttribute = _metadataReader.GetCustomAttribute(keywordAttributeHandle);
-                if (IsKeywordAttribute(keywordAttribute))
-                {
-                    SetKeywordAttributeParameters(keywordAttribute, out bodyMode, out useMode);
-                    break;
-                }
-            }
+            _keywordDefinitionStack.Pop();
 
             // Set all the properties for the keyword itself
-            string keywordName = _metadataReader.GetString(typeDef.Name);
             var keyword = new DynamicKeyword()
             {
                 ImplementingModule = _moduleInfo.Name,
@@ -463,7 +481,7 @@ namespace System.Management.Automation.Language
                 keyword.InnerKeywords.Add(innerKeyword.Keyword, innerKeyword);
             }
 
-            enumDefStack.Pop();
+            _enumDefStack.Pop();
 
             return keyword;
         }
@@ -520,10 +538,8 @@ namespace System.Management.Automation.Language
         /// <param name="property">the property representing the DynamicKeyword parameter</param>
         /// <param name="keywordParameterAttribute">the attribute on the property declaring the parameter's properties (position, mandatory)</param>
         /// <param name="genericContext">the generic type context in which the property is used</param>
-        /// <param name="enumDefStack"></param>
         /// <returns></returns>
-        private DynamicKeywordParameter ReadParameterSpecification(Stack<Dictionary<string, List<string>>> enumDefStack,
-            TypeNameGenericContext genericContext, PropertyDefinition property, CustomAttribute keywordParameterAttribute)
+        private DynamicKeywordParameter ReadParameterSpecification(TypeNameGenericContext genericContext, PropertyDefinition property, CustomAttribute keywordParameterAttribute)
         {
             string parameterName = _metadataReader.GetString(property.Name);
             string parameterType = property.DecodeSignature(TypeNameProvider, genericContext).ReturnType.ToString();
@@ -552,12 +568,11 @@ namespace System.Management.Automation.Language
                 Position = position,
                 Mandatory = mandatory,
             };
-            TrySetMemberEnumType(dkParameter, enumDefStack);
+            TrySetMemberEnumType(dkParameter);
             return dkParameter;
         }
 
-        private DynamicKeywordProperty ReadPropertySpecification(Stack<Dictionary<string, List<string>>> enumDefStack,
-            TypeNameGenericContext genericContext, PropertyDefinition property, CustomAttribute keywordPropertyAttribute)
+        private DynamicKeywordProperty ReadPropertySpecification(TypeNameGenericContext genericContext, PropertyDefinition property, CustomAttribute keywordPropertyAttribute)
         {
             string propertyName = _metadataReader.GetString(property.Name);
             string propertyType = property.DecodeSignature(TypeNameProvider, genericContext).ReturnType;
@@ -580,14 +595,14 @@ namespace System.Management.Automation.Language
                 TypeConstraint = propertyType,
                 Mandatory = mandatory,
             };
-            TrySetMemberEnumType(dkProperty, enumDefStack);
+            TrySetMemberEnumType(dkProperty);
             return dkProperty;
         }
 
-        private bool TrySetMemberEnumType(DynamicKeywordProperty keywordProperty, Stack<Dictionary<string, List<string>>> enumDefStack)
+        private bool TrySetMemberEnumType(DynamicKeywordProperty keywordProperty)
         {
             string propertyType = keywordProperty.TypeConstraint;
-            foreach (var enumScope in enumDefStack)
+            foreach (var enumScope in _enumDefStack)
             {
                 if (enumScope.ContainsKey(propertyType))
                 {

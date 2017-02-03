@@ -361,7 +361,7 @@ namespace System.Management.Automation.Language
 
             t_dynamicKeywordScope = new Stack<DynamicKeyword>();
             t_globalKeywords = new Dictionary<string, DynamicKeyword>();
-            t_seenDynamicKeywordsScopeStack = new Stack<HashSet<DynamicKeyword>>(new [] { new HashSet<DynamicKeyword> });
+            t_seenDynamicKeywordsScopeStack = new Stack<HashSet<DynamicKeyword>>(new [] { new HashSet<DynamicKeyword>() });
         }
     }
 
