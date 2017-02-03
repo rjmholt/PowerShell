@@ -15,6 +15,7 @@ using System.Collections;
 using System.Collections.Immutable;
 using System.Text;
 using System.Collections.ObjectModel;
+using System.Linq.Expressions;
 
 namespace System.Management.Automation.Language
 {
@@ -37,6 +38,8 @@ namespace System.Management.Automation.Language
             PreParse = null;
             PostParse = null;
             SemanticCheck = null;
+            RuntimeCall = null;
+            CompilationStrategy = DefaultCompilationStrategy;
         }
 
         /// <summary>
@@ -69,7 +72,16 @@ namespace System.Management.Automation.Language
         /// <summary>
         /// Specifies the call to be made at runtime for the keyword invocation
         /// </summary>
-        public Func<DynamicKeywordStatementAst, object> RuntimeCall
+        public Func<Dictionary<string, object>, Stack<Dictionary<string, object>>, object> RuntimeCall
+        {
+            get; set;
+        }
+
+        /// <summary>
+        /// Allows the specification of a new compilation algorithm, allowing the definition of
+        /// arbitrary DynamicKeywordStatementAst semantics
+        /// </summary>
+        public Func<Compiler, DynamicKeywordStatementAst, Expression> CompilationStrategy
         {
             get; set;
         }
@@ -84,6 +96,27 @@ namespace System.Management.Automation.Language
             var commandElements = Ast.CopyElements(kwAst.CommandElements);
             var commandAst = new CommandAst(kwAst.Extent, commandElements, TokenKind.Unknown, null);
             return StaticParameterBinder.BindCommand(commandAst);
+        }
+
+        private static Expression DefaultCompilationStrategy(Compiler compiler, DynamicKeywordStatementAst kwAst)
+        {
+            if (kwAst.Keyword.RuntimeCall == null)
+            {
+                return Expression.Empty();
+            }
+
+            var args = new Expression[kwAst.CommandElements.Count];
+            for (int i = 0; i < kwAst.CommandElements.Count; i++)
+            {
+                args[i] = compiler.VisitCommandElement(kwAst.CommandElements[i]);
+            }
+
+            Expression<Func<Dictionary<string, object>, Stack<Dictionary<string, object>>, object>> runtimeFunc = (vars, state) => kwAst.Keyword.RuntimeCall(vars, state);
+            Expression runtimeInvocation = Expression.Invoke(runtimeFunc, Expression.Constant(kwAst));
+
+            // TODO: Add parameter passing and recursive scriptblock compilation
+
+            return compiler.CallAddCurrentPipe(runtimeInvocation);
         }
     }
 
@@ -350,6 +383,7 @@ namespace System.Management.Automation.Language
         /// recursive descent.
         /// </summary>
         /// <param name="typeDef">the type definition object for the keyword class to be parsed</param>
+        /// <param name="enumDefStack"></param>
         /// <returns>the constructed DynamicKeyword from the parsed specification</returns>
         private DynamicKeyword ReadKeywordSpecification(Stack<Dictionary<string, List<string>>> enumDefStack, TypeDefinition typeDef)
         {
@@ -486,6 +520,7 @@ namespace System.Management.Automation.Language
         /// <param name="property">the property representing the DynamicKeyword parameter</param>
         /// <param name="keywordParameterAttribute">the attribute on the property declaring the parameter's properties (position, mandatory)</param>
         /// <param name="genericContext">the generic type context in which the property is used</param>
+        /// <param name="enumDefStack"></param>
         /// <returns></returns>
         private DynamicKeywordParameter ReadParameterSpecification(Stack<Dictionary<string, List<string>>> enumDefStack,
             TypeNameGenericContext genericContext, PropertyDefinition property, CustomAttribute keywordParameterAttribute)

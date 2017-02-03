@@ -6944,7 +6944,7 @@ namespace System.Management.Automation.Language
         /// <summary>
         /// A non-empty collection of command elements represent the content of the 
         /// DynamicKeyword.
-        /// It may represents a command, such as “Import-DSCResource”,
+        /// It may represent a command, such as “Import-DSCResource”,
         /// or DSC resources, then CommandElements includes:
         ///   (1) Keyword Name
         ///   (2) InstanceName

@@ -111,6 +111,17 @@ namespace System.Management.Automation.Language
         //[ThreadStatic]
         private static Stack<DynamicKeyword> t_dynamicKeywordScope;
 
+        private static Stack<HashSet<DynamicKeyword>> SeenDynamicKeywordsScopeStack
+        {
+            get
+            {
+                return t_seenDynamicKeywordsScopeStack ??
+                    (t_seenDynamicKeywordsScopeStack = new Stack<HashSet<DynamicKeyword>>());
+            }
+        }
+        //[ThreadStatic]
+        private static Stack<HashSet<DynamicKeyword>> t_seenDynamicKeywordsScopeStack;
+
         /// <summary>
         /// Keeps track of globally defined DynamicKeywords -- ones available at the top level
         /// </summary>
@@ -292,17 +303,95 @@ namespace System.Management.Automation.Language
         /// Enter into the scope of an invoked DynamicKeyword
         /// </summary>
         /// <param name="invokedKeyword"></param>
-        public static void EnterScope(DynamicKeyword invokedKeyword)
+        public static bool TryEnterScope(DynamicKeyword invokedKeyword)
         {
+            if (!TryRecordKeywordUse(invokedKeyword))
+            {
+                return false;
+            }
+
+            SeenDynamicKeywordsScopeStack.Push(new HashSet<DynamicKeyword>());
             DynamicKeywordScope.Push(invokedKeyword);
+            return true;
         }
 
         /// <summary>
         /// Leave the scope of an invoked DynamicKeyword
         /// </summary>
-        public static void LeaveScope()
+        public static IEnumerable<DynamicKeyword> LeaveScopeAndReturnUnusedRequiredKeywords()
         {
+            IEnumerable<DynamicKeyword> unusedRequiredKeywords = GetUnusedRequiredKeywords();
             DynamicKeywordScope.Pop();
+            SeenDynamicKeywordsScopeStack.Pop();
+            return unusedRequiredKeywords;
+        }
+
+        /// <summary>
+        /// Register a keyword as having been used in the most local scope, and return
+        /// false if its use was a semantic violation and true otherwise
+        /// </summary>
+        /// <param name="seenKeyword">the keyword seen in the AST</param>
+        /// <returns></returns>
+        public static bool TryRecordKeywordUse(DynamicKeyword seenKeyword)
+        {
+            if (SeenDynamicKeywordsScopeStack.Count < 1)
+            {
+                throw new InvalidOperationException("Stack should never be empty when counting keywords");
+            }
+
+            var currentScopeSeenKeywords = SeenDynamicKeywordsScopeStack.Peek();
+            switch (seenKeyword.UseMode)
+            {
+                // If a use-once keyword has been used already, then fail
+                case DynamicKeywordUseMode.Optional:
+                case DynamicKeywordUseMode.Required:
+                    return currentScopeSeenKeywords.Add(seenKeyword);
+
+                // Don't bother recording OptionalMany keywords, since we don't care
+                case DynamicKeywordUseMode.OptionalMany:
+                    return true;
+
+                // Record the RequiredMany keyword is seen to enforce use later
+                case DynamicKeywordUseMode.RequiredMany:
+                    currentScopeSeenKeywords.Add(seenKeyword);
+                    return true;
+
+                // This should be unreachable unless UseMode is extended
+                default:
+                    throw new InvalidOperationException("The UseMode of this keyword was not recognized");
+
+            }
+        }
+
+        /// <summary>
+        /// Return a list of inner DynamicKeywords with a Required(Many) use mode which have not been
+        /// seen in the most local scope
+        /// </summary>
+        /// <returns>the list of keywords that should have been used but were not</returns>
+        public static IEnumerable<DynamicKeyword> GetUnusedRequiredKeywords()
+        {
+            if (SeenDynamicKeywordsScopeStack.Count < 1)
+            {
+                throw new InvalidOperationException("Stack should never be empty when counting keywords");
+            }
+
+            foreach (var keyword in DynamicKeywordScope.Peek().InnerKeywords.Values)
+            {
+                switch (keyword.UseMode)
+                {
+                    case DynamicKeywordUseMode.Required:
+                    case DynamicKeywordUseMode.RequiredMany:
+                        if (!SeenDynamicKeywordsScopeStack.Peek().Contains(keyword))
+                        {
+                            yield return keyword;
+                        }
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            yield break;
         }
 
         /// <summary>
@@ -503,7 +592,12 @@ namespace System.Management.Automation.Language
         /// A custom function that determines the behavior of the DynamicKeyword when invoked at runtime, if set.
         /// This overrides the "ImplementingModule\KeywordName" function definition mechanism, if set.
         /// </summary>
-        public Func<DynamicKeywordStatementAst, object> RuntimeCall { get; set; }
+        public Func<Dictionary<string, object>, Stack<Dictionary<string, object>>, object> RuntimeCall { get; set; }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public Func<Compiler, DynamicKeywordStatementAst, Expression> CompilationStrategy { get; set; }
     }
 
 

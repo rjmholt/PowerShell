@@ -671,7 +671,10 @@ namespace System.Management.Automation.Language
         }
     }
 
-    internal class Compiler : ICustomAstVisitor2
+    /// <summary>
+    /// 
+    /// </summary>
+    public sealed class Compiler : ICustomAstVisitor2
     {
         internal static readonly ParameterExpression _executionContextParameter;
         internal static readonly ParameterExpression _functionContext;
@@ -1983,11 +1986,31 @@ namespace System.Management.Automation.Language
             return DynamicExpression.Dynamic(PSPipeWriterBinder.Get(), typeof(void), expr, pipe, _executionContextParameter);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="expr"></param>
+        /// <returns></returns>
+        public Expression CallAddCurrentPipe(Expression expr)
+        {
+            return CallAddPipe(expr, s_getCurrentPipe);
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="errorStatementAst"></param>
+        /// <returns></returns>
         public object VisitErrorStatement(ErrorStatementAst errorStatementAst)
         {
             return null;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="errorExpressionAst"></param>
+        /// <returns></returns>
         public object VisitErrorExpression(ErrorExpressionAst errorExpressionAst)
         {
             return ExpressionCache.Constant(1);
@@ -1995,6 +2018,11 @@ namespace System.Management.Automation.Language
 
         #region Script Blocks
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="scriptBlockAst"></param>
+        /// <returns></returns>
         public object VisitScriptBlock(ScriptBlockAst scriptBlockAst)
         {
             var funcDefn = scriptBlockAst.Parent as FunctionDefinitionAst;
@@ -2506,42 +2534,77 @@ namespace System.Management.Automation.Language
             }
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="typeConstraintAst"></param>
+        /// <returns></returns>
         public object VisitTypeConstraint(TypeConstraintAst typeConstraintAst)
         {
             Diagnostics.Assert(false, "Nothing to generate for a type constraint");
             return null;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="attributeAst"></param>
+        /// <returns></returns>
         public object VisitAttribute(AttributeAst attributeAst)
         {
             Diagnostics.Assert(false, "Nothing to generate for an attribute");
             return null;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="namedAttributeArgumentAst"></param>
+        /// <returns></returns>
         public object VisitNamedAttributeArgument(NamedAttributeArgumentAst namedAttributeArgumentAst)
         {
             Diagnostics.Assert(false, "Nothing to generate for a named attribute argument");
             return null;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="parameterAst"></param>
+        /// <returns></returns>
         public object VisitParameter(ParameterAst parameterAst)
         {
             Diagnostics.Assert(false, "Nothing to generate for a parameter");
             return null;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="paramBlockAst"></param>
+        /// <returns></returns>
         public object VisitParamBlock(ParamBlockAst paramBlockAst)
         {
             Diagnostics.Assert(false, "Nothing to generate for a parameter block");
             return null;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="namedBlockAst"></param>
+        /// <returns></returns>
         public object VisitNamedBlock(NamedBlockAst namedBlockAst)
         {
             Diagnostics.Assert(false, "NamedBlockAst is handled specially, not via the visitor.");
             return null;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="statementBlockAst"></param>
+        /// <returns></returns>
         public object VisitStatementBlock(StatementBlockAst statementBlockAst)
         {
             var exprs = new List<Expression>();
@@ -2814,21 +2877,41 @@ namespace System.Management.Automation.Language
 
         #region Statements
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="typeDefinitionAst"></param>
+        /// <returns></returns>
         public object VisitTypeDefinition(TypeDefinitionAst typeDefinitionAst)
         {
             return ExpressionCache.Empty;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="propertyMemberAst"></param>
+        /// <returns></returns>
         public object VisitPropertyMember(PropertyMemberAst propertyMemberAst)
         {
             return null;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="functionMemberAst"></param>
+        /// <returns></returns>
         public object VisitFunctionMember(FunctionMemberAst functionMemberAst)
         {
             return null;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="baseCtorInvokeMemberExpressionAst"></param>
+        /// <returns></returns>
         public object VisitBaseCtorInvokeMemberExpression(BaseCtorInvokeMemberExpressionAst baseCtorInvokeMemberExpressionAst)
         {
             var target = CompileExpressionOperand(baseCtorInvokeMemberExpressionAst.Expression);
@@ -2837,16 +2920,31 @@ namespace System.Management.Automation.Language
             return InvokeBaseCtorMethod(baseCtorCallConstraints, target, args);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="usingStatementAst"></param>
+        /// <returns></returns>
         public object VisitUsingStatement(UsingStatementAst usingStatementAst)
         {
             return ExpressionCache.Empty;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="configurationAst"></param>
+        /// <returns></returns>
         public object VisitConfigurationDefinition(ConfigurationDefinitionAst configurationAst)
         {
             return this.VisitPipeline(configurationAst.GenerateSetItemPipelineAst());
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="dynamicKeywordAst"></param>
+        /// <returns></returns>
         public object VisitDynamicKeywordStatement(DynamicKeywordStatementAst dynamicKeywordAst)
         {
             if (dynamicKeywordAst.Keyword.MetaStatement)
@@ -2854,20 +2952,20 @@ namespace System.Management.Automation.Language
                 return Expression.Empty();
             }
 
-            if (dynamicKeywordAst.Keyword.RuntimeCall != null)
+            if (dynamicKeywordAst.Keyword.CompilationStrategy != null)
             {
-                // TODO: Make this work in a reasonable way
-
-                Expression<Func<DynamicKeywordStatementAst, object>> runtimeFunc = x => dynamicKeywordAst.Keyword.RuntimeCall(x);
-                Expression runtimeInvocation = Expression.Invoke(runtimeFunc, Expression.Constant(dynamicKeywordAst));
-
-                return CallAddPipe(runtimeInvocation, s_getCurrentPipe);
+                return dynamicKeywordAst.Keyword.CompilationStrategy(this, dynamicKeywordAst);
             }
 
             return this.VisitPipeline(dynamicKeywordAst.GenerateCommandCallPipelineAst());
         }
 
         private bool _generatedCallToDefineWorkflows;
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="functionDefinitionAst"></param>
+        /// <returns></returns>
         public object VisitFunctionDefinition(FunctionDefinitionAst functionDefinitionAst)
         {
             if (functionDefinitionAst.IsWorkflow)
@@ -2893,6 +2991,11 @@ namespace System.Management.Automation.Language
                                    Expression.Constant(new ScriptBlockExpressionWrapper(functionDefinitionAst)));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="ifStmtAst"></param>
+        /// <returns></returns>
         public object VisitIfStatement(IfStatementAst ifStmtAst)
         {
             int clauseCount = ifStmtAst.Clauses.Count;
@@ -2932,12 +3035,22 @@ namespace System.Management.Automation.Language
             return result;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="trapStatementAst"></param>
+        /// <returns></returns>
         public object VisitTrap(TrapStatementAst trapStatementAst)
         {
             Diagnostics.Assert(false, "Traps are not visited directly.");
             return null;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="assignmentStatementAst"></param>
+        /// <returns></returns>
         public object VisitAssignmentStatement(AssignmentStatementAst assignmentStatementAst)
         {
             return CompileAssignment(assignmentStatementAst);
@@ -2978,6 +3091,11 @@ namespace System.Management.Automation.Language
             return Expression.Block(exprs);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="pipelineAst"></param>
+        /// <returns></returns>
         public object VisitPipeline(PipelineAst pipelineAst)
         {
             var temps = new List<ParameterExpression>();
@@ -3319,6 +3437,11 @@ namespace System.Management.Automation.Language
             }
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="mergingRedirectionAst"></param>
+        /// <returns></returns>
         public object VisitMergingRedirection(MergingRedirectionAst mergingRedirectionAst)
         {
             // Most Visit* methods return a Linq.Expression, this method being an exception.  VisitPipeline
@@ -3329,6 +3452,11 @@ namespace System.Management.Automation.Language
             return new MergingRedirection(mergingRedirectionAst.FromStream, mergingRedirectionAst.ToStream);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="fileRedirectionAst"></param>
+        /// <returns></returns>
         public object VisitFileRedirection(FileRedirectionAst fileRedirectionAst)
         {
             Expression fileNameExpr;
@@ -3353,6 +3481,11 @@ namespace System.Management.Automation.Language
                                   fileNameExpr);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="commandAst"></param>
+        /// <returns></returns>
         public object VisitCommand(CommandAst commandAst)
         {
             var commandElements = commandAst.CommandElements;
@@ -3360,36 +3493,7 @@ namespace System.Management.Automation.Language
 
             for (int i = 0; i < commandElements.Count; ++i)
             {
-                var element = commandElements[i];
-                if (element is CommandParameterAst)
-                {
-                    elementExprs[i] = Compile(element);
-                }
-                else
-                {
-                    var splatTest = element;
-                    bool splatted = false;
-
-                    UsingExpressionAst usingExpression = element as UsingExpressionAst;
-                    if (usingExpression != null)
-                    {
-                        splatTest = usingExpression.SubExpression;
-                    }
-
-                    VariableExpressionAst variableExpression = splatTest as VariableExpressionAst;
-                    if (variableExpression != null)
-                    {
-                        splatted = variableExpression.Splatted;
-                    }
-
-                    bool arrayIsSingleArgumentForNativeCommand = ArgumentIsNotReallyArrayIfCommandIsNative(element);
-                    elementExprs[i] =
-                        Expression.Call(CachedReflectionInfo.CommandParameterInternal_CreateArgument,
-                                        Expression.Constant(element.Extent),
-                                        Expression.Convert(GetCommandArgumentExpression(element), typeof(object)),
-                                        ExpressionCache.Constant(splatted),
-                                        ExpressionCache.Constant(arrayIsSingleArgumentForNativeCommand));
-                }
+                elementExprs[i] = VisitCommandElement(commandElements[i]);
             }
 
             Expression result = Expression.NewArrayInit(typeof(CommandParameterInternal), elementExprs);
@@ -3419,6 +3523,41 @@ namespace System.Management.Automation.Language
             return result;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="commandElement"></param>
+        /// <returns></returns>
+        public Expression VisitCommandElement(CommandElementAst commandElement)
+        {
+            if (commandElement is CommandParameterAst)
+            {
+                return Compile(commandElement);
+            }
+
+            var splatTest = commandElement;
+            bool splatted = false;
+
+            UsingExpressionAst usingExpression = commandElement as UsingExpressionAst;
+            if (usingExpression != null)
+            {
+                splatTest = usingExpression.SubExpression;
+            }
+
+            VariableExpressionAst variableExpression = splatTest as VariableExpressionAst;
+            if (variableExpression != null)
+            {
+                splatted = variableExpression.Splatted;
+            }
+
+            bool arrayIsSingleArgumentForNativeCommand = ArgumentIsNotReallyArrayIfCommandIsNative(commandElement);
+            return Expression.Call(CachedReflectionInfo.CommandParameterInternal_CreateArgument,
+                                Expression.Constant(commandElement.Extent),
+                                Expression.Convert(GetCommandArgumentExpression(commandElement), typeof(object)),
+                                ExpressionCache.Constant(splatted),
+                                ExpressionCache.Constant(arrayIsSingleArgumentForNativeCommand));
+        }
+
         private Expression GetCommandArgumentExpression(CommandElementAst element)
         {
             var constElement = element as ConstantExpressionAst;
@@ -3446,6 +3585,11 @@ namespace System.Management.Automation.Language
             return result;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="commandExpressionAst"></param>
+        /// <returns></returns>
         public object VisitCommandExpression(CommandExpressionAst commandExpressionAst)
         {
             var child = commandExpressionAst.Expression;
@@ -3483,6 +3627,11 @@ namespace System.Management.Automation.Language
             return true;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="commandParameterAst"></param>
+        /// <returns></returns>
         public object VisitCommandParameter(CommandParameterAst commandParameterAst)
         {
             var arg = commandParameterAst.Argument;
@@ -3609,6 +3758,11 @@ namespace System.Management.Automation.Language
             return CreateThrow(resultType, exception, argTypes, exceptionArgs);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="switchStatementAst"></param>
+        /// <returns></returns>
         public object VisitSwitchStatement(SwitchStatementAst switchStatementAst)
         {
             var avs = new AutomaticVarSaver(this, SpecialVariables.UnderbarVarPath, (int)AutomaticVariable.Underbar);
@@ -3837,6 +3991,11 @@ namespace System.Management.Automation.Language
                    };
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="dataStatementAst"></param>
+        /// <returns></returns>
         public object VisitDataStatement(DataStatementAst dataStatementAst)
         {
             // We'll generate the following:
@@ -4222,6 +4381,11 @@ namespace System.Management.Automation.Language
                 Expression.TryFinally(Expression.Block(exprs), avs.RestoreAutomaticVar()));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="forEachStatementAst"></param>
+        /// <returns></returns>
         public object VisitForEachStatement(ForEachStatementAst forEachStatementAst)
         {
             // We convert:
@@ -4271,16 +4435,31 @@ namespace System.Management.Automation.Language
             return result;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="doWhileStatementAst"></param>
+        /// <returns></returns>
         public object VisitDoWhileStatement(DoWhileStatementAst doWhileStatementAst)
         {
             return GenerateDoLoop(doWhileStatementAst);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="doUntilStatementAst"></param>
+        /// <returns></returns>
         public object VisitDoUntilStatement(DoUntilStatementAst doUntilStatementAst)
         {
             return GenerateDoLoop(doUntilStatementAst);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="forStatementAst"></param>
+        /// <returns></returns>
         public object VisitForStatement(ForStatementAst forStatementAst)
         {
             // We should not preserve the partial output if exception is thrown when evaluating the initializer.
@@ -4304,6 +4483,11 @@ namespace System.Management.Automation.Language
             return loop;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="whileStatementAst"></param>
+        /// <returns></returns>
         public object VisitWhileStatement(WhileStatementAst whileStatementAst)
         {
             return GenerateWhileLoop(whileStatementAst.Label,
@@ -4312,6 +4496,11 @@ namespace System.Management.Automation.Language
                                      (loopBody, breakTarget, continueTarget) => loopBody.Add(Compile(whileStatementAst.Body)));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="catchClauseAst"></param>
+        /// <returns></returns>
         public object VisitCatchClause(CatchClauseAst catchClauseAst)
         {
             Diagnostics.Assert(false, "the catch body is visited directly from VisitTryStatement.");
@@ -4387,6 +4576,11 @@ namespace System.Management.Automation.Language
             }
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="tryStatementAst"></param>
+        /// <returns></returns>
         public object VisitTryStatement(TryStatementAst tryStatementAst)
         {
             var temps = new List<ParameterExpression>();
@@ -4687,18 +4881,33 @@ namespace System.Management.Automation.Language
             return Expression.Block(UpdatePosition(ast), result);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="breakStatementAst"></param>
+        /// <returns></returns>
         public object VisitBreakStatement(BreakStatementAst breakStatementAst)
         {
             return GenerateBreakOrContinue(breakStatementAst, breakStatementAst.Label, lgt => lgt.BreakLabel, Expression.Break,
                                            CachedReflectionInfo.BreakException_ctor);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="continueStatementAst"></param>
+        /// <returns></returns>
         public object VisitContinueStatement(ContinueStatementAst continueStatementAst)
         {
             return GenerateBreakOrContinue(continueStatementAst, continueStatementAst.Label, lgt => lgt.ContinueLabel, Expression.Continue,
                                            CachedReflectionInfo.ContinueException_ctor);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="returnStatementAst"></param>
+        /// <returns></returns>
         public object VisitReturnStatement(ReturnStatementAst returnStatementAst)
         {
             // If we're returning from a trap, we must raise an exception because the trap is a distinct method, but we want
@@ -4752,6 +4961,11 @@ namespace System.Management.Automation.Language
             return returnExpr;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="exitStatementAst"></param>
+        /// <returns></returns>
         public object VisitExitStatement(ExitStatementAst exitStatementAst)
         {
             // We should not preserve the partial output if exception is thrown when evaluating exitStmt.pipeline.
@@ -4766,6 +4980,11 @@ namespace System.Management.Automation.Language
                                  typeof(void)));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="throwStatementAst"></param>
+        /// <returns></returns>
         public object VisitThrowStatement(ThrowStatementAst throwStatementAst)
         {
             // We should not preserve the partial output if exception is thrown when evaluating throwStmt.pipeline.
@@ -4787,6 +5006,13 @@ namespace System.Management.Automation.Language
 
         #region Expressions
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="lhs"></param>
+        /// <param name="rhs"></param>
+        /// <param name="ignoreCase"></param>
+        /// <returns></returns>
         public Expression GenerateCallContains(Expression lhs, Expression rhs, bool ignoreCase)
         {
             return Expression.Call(
@@ -4799,6 +5025,11 @@ namespace System.Management.Automation.Language
                 rhs.Cast(typeof(object)));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="binaryExpressionAst"></param>
+        /// <returns></returns>
         public object VisitBinaryExpression(BinaryExpressionAst binaryExpressionAst)
         {
             object constantValue;
@@ -5054,6 +5285,11 @@ namespace System.Management.Automation.Language
             return Expression.Constant(WildcardPattern.Get(val, options));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="unaryExpressionAst"></param>
+        /// <returns></returns>
         public object VisitUnaryExpression(UnaryExpressionAst unaryExpressionAst)
         {
             object constantValue;
@@ -5145,6 +5381,11 @@ namespace System.Management.Automation.Language
             return Expression.Block(temps, exprs);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="convertExpressionAst"></param>
+        /// <returns></returns>
         public object VisitConvertExpression(ConvertExpressionAst convertExpressionAst)
         {
             object constantValue;
@@ -5209,16 +5450,31 @@ namespace System.Management.Automation.Language
             return ConvertValue(convertExpressionAst.Type, childExpr);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="constantExpressionAst"></param>
+        /// <returns></returns>
         public object VisitConstantExpression(ConstantExpressionAst constantExpressionAst)
         {
             return Expression.Constant(constantExpressionAst.Value);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="stringConstantExpressionAst"></param>
+        /// <returns></returns>
         public object VisitStringConstantExpression(StringConstantExpressionAst stringConstantExpressionAst)
         {
             return Expression.Constant(stringConstantExpressionAst.Value);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="subExpressionAst"></param>
+        /// <returns></returns>
         public object VisitSubExpression(SubExpressionAst subExpressionAst)
         {
             if (subExpressionAst.SubExpression.Statements.Count == 0)
@@ -5237,6 +5493,11 @@ namespace System.Management.Automation.Language
                                         : CaptureAstContext.AssignmentWithoutResultPreservation);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="usingExpression"></param>
+        /// <returns></returns>
         public object VisitUsingExpression(UsingExpressionAst usingExpression)
         {
             string usingExprKey = PsUtils.GetUsingExpressionKey(usingExpression);
@@ -5246,6 +5507,11 @@ namespace System.Management.Automation.Language
                                    _executionContextParameter);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="variableExpressionAst"></param>
+        /// <returns></returns>
         public object VisitVariableExpression(VariableExpressionAst variableExpressionAst)
         {
             var varPath = variableExpressionAst.VariablePath;
@@ -5314,11 +5580,21 @@ namespace System.Management.Automation.Language
                                    Expression.Constant(errorPos));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="typeExpressionAst"></param>
+        /// <returns></returns>
         public object VisitTypeExpression(TypeExpressionAst typeExpressionAst)
         {
             return CompileTypeName(typeExpressionAst.TypeName, typeExpressionAst.Extent);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="memberExpressionAst"></param>
+        /// <returns></returns>
         public object VisitMemberExpression(MemberExpressionAst memberExpressionAst)
         {
             // Getting a static member is much simpler because we can ignore instance
@@ -5427,6 +5703,11 @@ namespace System.Management.Automation.Language
             return DynamicExpression.Dynamic(binder, typeof(object), args.Prepend(memberNameExpr).Prepend(target));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="invokeMemberExpressionAst"></param>
+        /// <returns></returns>
         public object VisitInvokeMemberExpression(InvokeMemberExpressionAst invokeMemberExpressionAst)
         {
             var constraints = GetInvokeMemberConstraints(invokeMemberExpressionAst);
@@ -5446,6 +5727,11 @@ namespace System.Management.Automation.Language
                                        args, invokeMemberExpressionAst.Static, false);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="arrayExpressionAst"></param>
+        /// <returns></returns>
         public object VisitArrayExpression(ArrayExpressionAst arrayExpressionAst)
         {
             Expression values = null;
@@ -5496,6 +5782,11 @@ namespace System.Management.Automation.Language
             return DynamicExpression.Dynamic(PSToObjectArrayBinder.Get(), typeof(object[]), values);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="arrayLiteralAst"></param>
+        /// <returns></returns>
         public object VisitArrayLiteral(ArrayLiteralAst arrayLiteralAst)
         {
             return Expression.NewArrayInit(typeof(object),
@@ -5525,6 +5816,11 @@ namespace System.Management.Automation.Language
             yield return temp;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="hashtableAst"></param>
+        /// <returns></returns>
         public object VisitHashtable(HashtableAst hashtableAst)
         {
             var temp = NewTemp(typeof(Hashtable), "hashtable");
@@ -5533,6 +5829,11 @@ namespace System.Management.Automation.Language
                 BuildHashtable(hashtableAst.KeyValuePairs, temp, ordered: false));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="scriptBlockExpressionAst"></param>
+        /// <returns></returns>
         public object VisitScriptBlockExpression(ScriptBlockExpressionAst scriptBlockExpressionAst)
         {
             // The script block is not visited until it is executed, executing a script block expression node simply
@@ -5549,6 +5850,11 @@ namespace System.Management.Automation.Language
                 );
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="parenExpressionAst"></param>
+        /// <returns></returns>
         public object VisitParenExpression(ParenExpressionAst parenExpressionAst)
         {
             var pipe = parenExpressionAst.Pipeline;
@@ -5569,6 +5875,11 @@ namespace System.Management.Automation.Language
                                                : CaptureAstContext.AssignmentWithoutResultPreservation);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="expandableStringExpressionAst"></param>
+        /// <returns></returns>
         public object VisitExpandableStringExpression(ExpandableStringExpressionAst expandableStringExpressionAst)
         {
             var left = Expression.Constant(expandableStringExpressionAst.FormatExpression);
@@ -5581,6 +5892,11 @@ namespace System.Management.Automation.Language
                                    left, right);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="indexExpressionAst"></param>
+        /// <returns></returns>
         public object VisitIndexExpression(IndexExpressionAst indexExpressionAst)
         {
             var targetExpr = CompileExpressionOperand(indexExpressionAst.Target);
@@ -5606,11 +5922,21 @@ namespace System.Management.Automation.Language
             return DynamicExpression.Dynamic(PSGetIndexBinder.Get(1, constraints), typeof(object), targetExpr, CompileExpressionOperand(index));
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="attributedExpressionAst"></param>
+        /// <returns></returns>
         public object VisitAttributedExpression(AttributedExpressionAst attributedExpressionAst)
         {
             return attributedExpressionAst.Child.Accept(this);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="blockStatementAst"></param>
+        /// <returns></returns>
         public object VisitBlockStatement(BlockStatementAst blockStatementAst)
         {
             return null;

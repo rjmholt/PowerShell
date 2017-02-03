@@ -1450,4 +1450,10 @@ ModuleVersion : Version of module to import. If used, ModuleName must represent 
   <data name="PsDscRunAsCredentialMergeErrorForCompositeResources" xml:space="preserve">
     <value>Conflict in using PsDscRunAsCredential for Resource {0} because it already specifies PsDscRunAsCredential value. We can only use one PsDscRunAsCredential for the composite resource. </value>
   </data>
+  <data name="DynamicKeywordRequiredButNotUsedInLocalScope" xml:space="preserve">
+    <value>The '{0}' dynamic keyword was not used in the local scope, but was required to be used</value>
+  </data>
+  <data name="DynamicKeywordUsedMoreThanUseModeAllows" xml:space="preserve">
+    <value>The '{0}' dynamic keyword may not be used more than once in a given local scope</value>
+  </data>
 </root>
