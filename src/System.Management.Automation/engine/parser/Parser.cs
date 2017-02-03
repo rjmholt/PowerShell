@@ -3414,7 +3414,8 @@ namespace System.Management.Automation.Language
         /// <returns></returns>
         private StatementAst DynamicKeywordStatementRule(Token functionName, DynamicKeyword keywordData)
         {
-            if (!DynamicKeyword.TryEnterScope(keywordData))
+            // Check the UseMode of the keyword allows its invocation
+            if (!DynamicKeyword.TryRecordKeywordUse(keywordData))
             {
                 ReportError(functionName.Extent, () => ParserStrings.DynamicKeywordUsedMoreThanUseModeAllows, keywordData.Keyword);
                 return null;
@@ -3438,7 +3439,6 @@ namespace System.Management.Automation.Language
                 }
                 catch (Exception e)
                 {
-                    DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                     ReportError(functionName.Extent, () => ParserStrings.DynamicKeywordPreParseException, keywordData.ResourceName, e.ToString());
                     return null;
                 }
@@ -3446,7 +3446,6 @@ namespace System.Management.Automation.Language
 
             if (keywordData.IsReservedKeyword)
             {
-                DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                 // ErrorRecovery: eat the token
                 ReportError(functionName.Extent, () => ParserStrings.UnsupportedReservedKeyword, keywordData.Keyword);
                 return null;
@@ -3454,7 +3453,6 @@ namespace System.Management.Automation.Language
 
             if (keywordData.HasReservedProperties)
             {
-                DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                 // ErrorRecovery: eat the token
                 ReportError(functionName.Extent, () => ParserStrings.UnsupportedReservedProperty, "'Require', 'Trigger', 'Notify', 'Before', 'After' and 'Subscribe'");
                 return null;
@@ -3491,7 +3489,6 @@ namespace System.Management.Automation.Language
                         // Name not required so report missing brace
                         ReportIncompleteInput(After(functionName.Extent), () => ParserStrings.MissingBraceInObjectDefinition);
                     }
-                    DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                     return null;
                 }
 
@@ -3502,7 +3499,6 @@ namespace System.Management.Automation.Language
                     lCurly = nameToken;
                     if (keywordData.NameMode == DynamicKeywordNameMode.NameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired)
                     {
-                        DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                         ReportError(After(functionName), () => ParserStrings.RequiredNameOrExpressionMissing);
                         UngetToken(nameToken);
                         return null;
@@ -3512,7 +3508,6 @@ namespace System.Management.Automation.Language
                 {
                     if (keywordData.NameMode == DynamicKeywordNameMode.NoName)
                     {
-                        DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                         ReportError(After(functionName), () => ParserStrings.UnexpectedNameForType, functionName.Text, nameToken.Text);
                         UngetToken(nameToken);
                         return null;
@@ -3524,7 +3519,6 @@ namespace System.Management.Automation.Language
                     // If only a simple name is allowed, then the string must be non-null.
                     if ((keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleOptionalName) && string.IsNullOrEmpty(elementName))
                     {
-                        DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                         ReportIncompleteInput(After(functionName), () => ParserStrings.RequiredNameOrExpressionMissing);
                         UngetToken(nameToken);
                         return null;
@@ -3547,14 +3541,12 @@ namespace System.Management.Automation.Language
                             // It wasn't an '{' and it wasn't a name expression so it's a unexpected token.
                             ReportError(After(functionName), () => ParserStrings.UnexpectedToken, nameToken.Text);
                         }
-                        DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                         return null;
                     }
 
                     // Ok, we got a name expression, but we're expecting no name, so it's and error.
                     if (keywordData.NameMode == DynamicKeywordNameMode.NoName)
                     {
-                        DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                         ReportError(After(functionName), () => ParserStrings.UnexpectedNameForType, functionName.Text, instanceName.ToString());
                         return null;
                     }
@@ -3562,7 +3554,6 @@ namespace System.Management.Automation.Language
                     // We were expecting a simple name so report an error
                     if (keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleOptionalName)
                     {
-                        DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                         // If no match, then this is an incomplete token BUGBUG fix message
                         ReportError(nameToken.Extent, () => ParserStrings.UnexpectedToken, nameToken.Text);
                         return null;
@@ -3594,7 +3585,6 @@ namespace System.Management.Automation.Language
                         UngetToken(lCurly);
                         ReportIncompleteInput(After(functionName.Extent), () => ParserStrings.MissingBraceInObjectDefinition);
 
-                        DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                         // Preserve the name expression for tab completion
                         return originalInstanceName == null
                                    ? null
@@ -3636,11 +3626,9 @@ namespace System.Management.Automation.Language
                             var errorExpr = new ErrorExpressionAst(errorExtent);
                             var memberExpr = new MemberExpressionAst(originalInstanceName.Extent, originalInstanceName, errorExpr, @static: false);
 
-                            DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                             return new ErrorStatementAst(errorExtent, new[] { memberExpr });
                         }
 
-                        DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                         UngetToken(lCurly);
                         // Preserve the name expression for tab completion
                         return originalInstanceName == null
@@ -3657,6 +3645,8 @@ namespace System.Management.Automation.Language
                 ExpressionAst body = null;
                 if (keywordData.BodyMode == DynamicKeywordBodyMode.ScriptBlock)
                 {
+                    DynamicKeyword.EnterScope(keywordData);
+                    List<DynamicKeyword> unusedRequiredKeywords;
                     var oldInConfiguration = _inConfiguration;
                     try
                     {
@@ -3666,22 +3656,51 @@ namespace System.Management.Automation.Language
                     finally
                     {
                         _inConfiguration = oldInConfiguration;
+                        unusedRequiredKeywords = DynamicKeyword.GetUnusedRequiredKeywords();
+                        DynamicKeyword.LeaveScope();
+                    }
+                    if (unusedRequiredKeywords != null && unusedRequiredKeywords.Count != 0)
+                    {
+                        foreach (var unusedKeyword in unusedRequiredKeywords)
+                        {
+                            ReportError(functionName.Extent, () => ParserStrings.DynamicKeywordRequiredButNotUsedInLocalScope, unusedKeyword.Keyword);
+                        }
+                        return null;
                     }
                 }
                 else if (keywordData.BodyMode == DynamicKeywordBodyMode.Hashtable)
                 {
+                    // Using inner dynamic keywords in hashtable blocks seems unlikely,
+                    // but no reason to rule it out
+                    DynamicKeyword.EnterScope(keywordData);
+
                     // Resource property value could be set to nested DSC resources except Script resource
                     bool isScriptResource = String.Compare(functionName.Text, @"Script", StringComparison.OrdinalIgnoreCase) == 0;
+                    List<DynamicKeyword> unusedRequiredKeywords;
                     try
                     {
                         if (isScriptResource)
+                        {
                             DynamicKeyword.Push();
+                        }
                         body = HashExpressionRule(lCurly, true /* parsingSchemaElement */);
                     }
                     finally
                     {
                         if (isScriptResource)
+                        {
                             DynamicKeyword.Pop();
+                        }
+                        unusedRequiredKeywords = DynamicKeyword.GetUnusedRequiredKeywords();
+                        DynamicKeyword.LeaveScope();
+                    }
+                    if (unusedRequiredKeywords != null && unusedRequiredKeywords.Count != 0)
+                    {
+                        foreach (var unusedKeyword in unusedRequiredKeywords)
+                        {
+                            ReportError(functionName.Extent, () => ParserStrings.DynamicKeywordRequiredButNotUsedInLocalScope, unusedKeyword.Keyword);
+                        }
+                        return null;
                     }
                 }
                 // commandast
@@ -3691,7 +3710,6 @@ namespace System.Management.Automation.Language
                     // Failed to read the statement body
                     ReportIncompleteInput(After(lCurly), () => ParserStrings.MissingStatementAfterKeyword, keywordData.Keyword);
 
-                    DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                     // Preserve the name expression for tab completion
                     return originalInstanceName == null
                                ? null
@@ -3745,22 +3763,11 @@ namespace System.Management.Automation.Language
                 }
                 catch (Exception e)
                 {
-                    DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
                     ReportError(functionName.Extent, () => ParserStrings.DynamicKeywordPostParseException, keywordData.Keyword, e.ToString());
                     return null;
                 }
             }
 
-            IEnumerable<DynamicKeyword> unusedKeywords = DynamicKeyword.LeaveScopeAndReturnUnusedRequiredKeywords();
-            if (unusedKeywords != null && unusedKeywords.Count() > 0)
-            {
-                foreach (var unusedKeyword in unusedKeywords)
-                {
-                    ReportError(functionName.Extent, () => ParserStrings.DynamicKeywordRequiredButNotUsedInLocalScope, unusedKeyword.Keyword);
-                }
-                // TODO: Possibly return a more helpful error AST here
-                return null;
-            }
             return dynamicKeywordAst;
         }
 
