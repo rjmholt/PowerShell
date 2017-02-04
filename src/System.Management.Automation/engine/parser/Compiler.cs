@@ -672,7 +672,7 @@ namespace System.Management.Automation.Language
     }
 
     /// <summary>
-    /// 
+    /// Compiles PowerShell AST nodes to bytecode for execution
     /// </summary>
     public sealed class Compiler : ICustomAstVisitor2
     {
@@ -1987,7 +1987,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Generate a call expression for the given expression wrapped in the compiler's current pipe
         /// </summary>
         /// <param name="expr"></param>
         /// <returns></returns>
@@ -1997,7 +1997,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile an ErrorStatementAst
         /// </summary>
         /// <param name="errorStatementAst"></param>
         /// <returns></returns>
@@ -2007,7 +2007,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile an ErrorExpressionAst
         /// </summary>
         /// <param name="errorExpressionAst"></param>
         /// <returns></returns>
@@ -2019,7 +2019,7 @@ namespace System.Management.Automation.Language
         #region Script Blocks
 
         /// <summary>
-        /// 
+        /// Compile a ScriptBlockAst
         /// </summary>
         /// <param name="scriptBlockAst"></param>
         /// <returns></returns>
@@ -2535,7 +2535,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a TypeConstraintAst
         /// </summary>
         /// <param name="typeConstraintAst"></param>
         /// <returns></returns>
@@ -2546,7 +2546,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile an AttributeAst
         /// </summary>
         /// <param name="attributeAst"></param>
         /// <returns></returns>
@@ -2557,7 +2557,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a NamedAttributeArgumentAst
         /// </summary>
         /// <param name="namedAttributeArgumentAst"></param>
         /// <returns></returns>
@@ -2568,7 +2568,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a ParameterAst
         /// </summary>
         /// <param name="parameterAst"></param>
         /// <returns></returns>
@@ -2579,7 +2579,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a ParamBlockAst
         /// </summary>
         /// <param name="paramBlockAst"></param>
         /// <returns></returns>
@@ -2590,7 +2590,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a NamedBlockAst
         /// </summary>
         /// <param name="namedBlockAst"></param>
         /// <returns></returns>
@@ -2601,7 +2601,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a StatementBlockAst
         /// </summary>
         /// <param name="statementBlockAst"></param>
         /// <returns></returns>
@@ -2878,7 +2878,7 @@ namespace System.Management.Automation.Language
         #region Statements
 
         /// <summary>
-        /// 
+        /// Compile a TypeDefinitionAst
         /// </summary>
         /// <param name="typeDefinitionAst"></param>
         /// <returns></returns>
@@ -2888,7 +2888,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a PropertyMemberAst
         /// </summary>
         /// <param name="propertyMemberAst"></param>
         /// <returns></returns>
@@ -2898,7 +2898,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a FunctionMemberAst
         /// </summary>
         /// <param name="functionMemberAst"></param>
         /// <returns></returns>
@@ -2908,7 +2908,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a BaseCtorInvokeMemberExpressionAst
         /// </summary>
         /// <param name="baseCtorInvokeMemberExpressionAst"></param>
         /// <returns></returns>
@@ -2921,7 +2921,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a UsingStatementAst
         /// </summary>
         /// <param name="usingStatementAst"></param>
         /// <returns></returns>
@@ -2931,7 +2931,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a ConfigurationDefinitionAst
         /// </summary>
         /// <param name="configurationAst"></param>
         /// <returns></returns>
@@ -2941,7 +2941,11 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a DynamicKeywordStatementAst. This will generate an empty expression if the invoked
+        /// keyword is marked as a meta-statement. Otherwise, if it has a non-null CompilationStrategy
+        /// delegate it will use that to generate an expression. Finally, if this is null, it will call
+        /// the AST's GenerateCommandCallPipelineAst() method, which generates a synthetic function call
+        /// AST for a function named "[defining-module-name]\[keyword-name]".
         /// </summary>
         /// <param name="dynamicKeywordAst"></param>
         /// <returns></returns>
@@ -2962,7 +2966,7 @@ namespace System.Management.Automation.Language
 
         private bool _generatedCallToDefineWorkflows;
         /// <summary>
-        /// 
+        /// Compile a FunctionDefinitionAst
         /// </summary>
         /// <param name="functionDefinitionAst"></param>
         /// <returns></returns>
@@ -2992,7 +2996,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile an IfStatementAst
         /// </summary>
         /// <param name="ifStmtAst"></param>
         /// <returns></returns>
@@ -3036,7 +3040,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a TrapStatementAst
         /// </summary>
         /// <param name="trapStatementAst"></param>
         /// <returns></returns>
@@ -3047,7 +3051,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile an AssignmentStatementAst
         /// </summary>
         /// <param name="assignmentStatementAst"></param>
         /// <returns></returns>
@@ -3438,7 +3442,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a MergingRedirectionAst
         /// </summary>
         /// <param name="mergingRedirectionAst"></param>
         /// <returns></returns>
@@ -3453,7 +3457,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a FileRedirectionAst
         /// </summary>
         /// <param name="fileRedirectionAst"></param>
         /// <returns></returns>
@@ -3482,7 +3486,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a CommandAst
         /// </summary>
         /// <param name="commandAst"></param>
         /// <returns></returns>
@@ -3524,7 +3528,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Copmile a CommandElementAst
         /// </summary>
         /// <param name="commandElement"></param>
         /// <returns></returns>
@@ -3586,7 +3590,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a CommandExpressionAst
         /// </summary>
         /// <param name="commandExpressionAst"></param>
         /// <returns></returns>
@@ -3628,7 +3632,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a CommandParameterAst
         /// </summary>
         /// <param name="commandParameterAst"></param>
         /// <returns></returns>
@@ -3759,7 +3763,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a SwitchStatementAst
         /// </summary>
         /// <param name="switchStatementAst"></param>
         /// <returns></returns>
@@ -3992,7 +3996,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a DataStatementAst
         /// </summary>
         /// <param name="dataStatementAst"></param>
         /// <returns></returns>
@@ -4382,7 +4386,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a ForEachStatementAst
         /// </summary>
         /// <param name="forEachStatementAst"></param>
         /// <returns></returns>
@@ -4436,7 +4440,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a DoWhileStatementAst
         /// </summary>
         /// <param name="doWhileStatementAst"></param>
         /// <returns></returns>
@@ -4446,7 +4450,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a DoUntilStatementAst
         /// </summary>
         /// <param name="doUntilStatementAst"></param>
         /// <returns></returns>
@@ -4456,7 +4460,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a ForStatementAst
         /// </summary>
         /// <param name="forStatementAst"></param>
         /// <returns></returns>
@@ -4484,7 +4488,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a VisitWhileStatementAst
         /// </summary>
         /// <param name="whileStatementAst"></param>
         /// <returns></returns>
@@ -4497,7 +4501,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a CatchClauseAst
         /// </summary>
         /// <param name="catchClauseAst"></param>
         /// <returns></returns>
@@ -4577,7 +4581,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a TryStatementAst
         /// </summary>
         /// <param name="tryStatementAst"></param>
         /// <returns></returns>
@@ -4882,7 +4886,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a BreakStatementAst
         /// </summary>
         /// <param name="breakStatementAst"></param>
         /// <returns></returns>
@@ -4893,7 +4897,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a ContinueStatementAst
         /// </summary>
         /// <param name="continueStatementAst"></param>
         /// <returns></returns>
@@ -4904,7 +4908,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a ReturnStatementAst
         /// </summary>
         /// <param name="returnStatementAst"></param>
         /// <returns></returns>
@@ -4962,7 +4966,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile an ExitStatementAst
         /// </summary>
         /// <param name="exitStatementAst"></param>
         /// <returns></returns>
@@ -4981,7 +4985,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a ThrowStatementAst
         /// </summary>
         /// <param name="throwStatementAst"></param>
         /// <returns></returns>
@@ -5007,7 +5011,7 @@ namespace System.Management.Automation.Language
         #region Expressions
 
         /// <summary>
-        /// 
+        /// Generate a call to the "-contains" operator
         /// </summary>
         /// <param name="lhs"></param>
         /// <param name="rhs"></param>
@@ -5026,7 +5030,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a BinaryExpressionAst
         /// </summary>
         /// <param name="binaryExpressionAst"></param>
         /// <returns></returns>
@@ -5286,7 +5290,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a UnaryExpressionAst
         /// </summary>
         /// <param name="unaryExpressionAst"></param>
         /// <returns></returns>
@@ -5382,7 +5386,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a ConvertExpressionAst
         /// </summary>
         /// <param name="convertExpressionAst"></param>
         /// <returns></returns>
@@ -5451,7 +5455,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a ConstantExpressionAst
         /// </summary>
         /// <param name="constantExpressionAst"></param>
         /// <returns></returns>
@@ -5461,7 +5465,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a StringConstantExpressionAst
         /// </summary>
         /// <param name="stringConstantExpressionAst"></param>
         /// <returns></returns>
@@ -5471,7 +5475,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a SubExpressionAst
         /// </summary>
         /// <param name="subExpressionAst"></param>
         /// <returns></returns>
@@ -5494,7 +5498,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a UsingExpressionAst
         /// </summary>
         /// <param name="usingExpression"></param>
         /// <returns></returns>
@@ -5508,7 +5512,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a VariableExpressionAst
         /// </summary>
         /// <param name="variableExpressionAst"></param>
         /// <returns></returns>
@@ -5581,7 +5585,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a TypeExpressionAst
         /// </summary>
         /// <param name="typeExpressionAst"></param>
         /// <returns></returns>
@@ -5591,7 +5595,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a MemberExpressionAst
         /// </summary>
         /// <param name="memberExpressionAst"></param>
         /// <returns></returns>
@@ -5704,7 +5708,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile an InvokeMemberExpressionAst
         /// </summary>
         /// <param name="invokeMemberExpressionAst"></param>
         /// <returns></returns>
@@ -5728,7 +5732,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile an ArrayExpressionAst
         /// </summary>
         /// <param name="arrayExpressionAst"></param>
         /// <returns></returns>
@@ -5783,7 +5787,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile an ArrayLiteralAst
         /// </summary>
         /// <param name="arrayLiteralAst"></param>
         /// <returns></returns>
@@ -5817,7 +5821,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a HashtableAst
         /// </summary>
         /// <param name="hashtableAst"></param>
         /// <returns></returns>
@@ -5830,7 +5834,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a ScriptBlockExpressionAst
         /// </summary>
         /// <param name="scriptBlockExpressionAst"></param>
         /// <returns></returns>
@@ -5851,7 +5855,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a ParenExpressionAst
         /// </summary>
         /// <param name="parenExpressionAst"></param>
         /// <returns></returns>
@@ -5876,7 +5880,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile an ExpandableStringExpressionAst
         /// </summary>
         /// <param name="expandableStringExpressionAst"></param>
         /// <returns></returns>
@@ -5893,7 +5897,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile an IndexExpressionAst
         /// </summary>
         /// <param name="indexExpressionAst"></param>
         /// <returns></returns>
@@ -5923,7 +5927,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile an AttributedExpressionAst
         /// </summary>
         /// <param name="attributedExpressionAst"></param>
         /// <returns></returns>
@@ -5933,7 +5937,7 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// 
+        /// Compile a BlockStatementAst
         /// </summary>
         /// <param name="blockStatementAst"></param>
         /// <returns></returns>
