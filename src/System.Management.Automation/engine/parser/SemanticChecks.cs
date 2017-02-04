@@ -1210,7 +1210,6 @@ namespace System.Management.Automation.Language
             var commandAst = new CommandAst(dynamicKeywordStatementAst.Extent, commandElements, TokenKind.Unknown, null);
             StaticBindingResult bindingResult = StaticParameterBinder.BindCommand(commandAst);
 
-            var parameterErrors = new List<ParseError>();
             HashSet<string> mandatoryParameters = new HashSet<string>(keyword.Parameters.Values.Where(p => p.Mandatory).Select(p => p.Name));
             Dictionary<int, string> positionalParameters = keyword.Parameters.Values.Where(p => p.Position != -1).ToDictionary(p => p.Position, p => p.Name);
             foreach (KeyValuePair<string, ParameterBindingResult> boundParameter in bindingResult.BoundParameters)
@@ -1223,7 +1222,7 @@ namespace System.Management.Automation.Language
                     if (!positionalParameters.ContainsKey(paramPosition))
                     {
                         var msg = String.Format("The keyword '{0}' does not support the parameter at position {1}", keyword.Keyword, paramPosition);
-                        parameterErrors.Add(new ParseError(dynamicKeywordStatementAst.Extent, "UnsupportedParameter", msg));
+                        _parser.ReportError(new ParseError(dynamicKeywordStatementAst.Extent, "UnsupportedParameter", msg));
                         continue;
                     }
 
@@ -1239,7 +1238,7 @@ namespace System.Management.Automation.Language
                 if (!keyword.Parameters.ContainsKey(boundParameter.Key))
                 {
                     var msg = String.Format("The keyword '{0}' does not support the parameter '{1}'", keyword.Keyword, boundParameter.Value.Parameter.Name);
-                    parameterErrors.Add(new ParseError(dynamicKeywordStatementAst.Extent, "UnsupportedParameter", msg));
+                    _parser.ReportError(new ParseError(dynamicKeywordStatementAst.Extent, "UnsupportedParameter", msg));
                     continue;
                 }
 
@@ -1253,12 +1252,7 @@ namespace System.Management.Automation.Language
             foreach (var unsetMandatoryParam in mandatoryParameters)
             {
                 var msg = String.Format("The parameter '{0}' for keyword '{1}' was required but not provided", unsetMandatoryParam, keyword.Keyword);
-                parameterErrors.Add(new ParseError(dynamicKeywordStatementAst.Extent, "MissingMandatoryParameter", msg));
-            }
-
-            foreach (var error in parameterErrors)
-            {
-                _parser.ReportError(error);
+                _parser.ReportError(new ParseError(dynamicKeywordStatementAst.Extent, "MissingMandatoryParameter", msg));
             }
 
             //////////////////////////////////////////////////////////////////////////////////
