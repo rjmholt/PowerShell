@@ -394,7 +394,7 @@ namespace System.Management.Automation.Language
                 if (enclosingScope.Contains(keywordName))
                 {
                     // TODO: Make this more PS-compatible for consumption by users
-                    throw new PSNotSupportedException("Cannot define two keywords of the same name in the same scope");
+                    throw PSTraceSource.NewNotSupportedException("Cannot define two keywords of the same name in the same scope");
                 }
             }
             _keywordDefinitionStack.Peek().Add(keywordName);
@@ -453,7 +453,7 @@ namespace System.Management.Automation.Language
                     if (bodyMode == DynamicKeywordBodyMode.Command)
                     {
                         // TODO: Make this more user-consumable
-                        throw new PSNotSupportedException("Cannot define keywords underneath a command-body keyword");
+                        throw PSTraceSource.NewNotSupportedException("Cannot define keywords underneath a command-body keyword");
                     }
                     innerKeywords.Add(ReadKeywordSpecification(innerTypeDef));
                 }
@@ -704,6 +704,7 @@ namespace System.Management.Automation.Language
                 else
                 {
                     // TODO: Throw something about expecting a type that was not found
+                    PSTraceSource.NewArgumentException("Expected to find keyword definition '{0}'. Has the defining module been modified?", innerKeyword.Keyword);
                 }
             }
 

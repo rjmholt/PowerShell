@@ -1195,10 +1195,76 @@ namespace System.Management.Automation.Language
 
         public override AstVisitAction VisitDynamicKeywordStatement(DynamicKeywordStatementAst dynamicKeywordStatementAst)
         {
+            DynamicKeyword keyword = dynamicKeywordStatementAst.Keyword;
+
+            ////////////////////////////////////////////////////////////////////////////////////
+            // Check the parameters given against any parameter specifications on the keyword
+            ////////////////////////////////////////////////////////////////////////////////////
+
+            // Rebuild the invocation as a CommandAst and run the parameter binder on it
+            CommandElementAst[] commandElements = new CommandElementAst[dynamicKeywordStatementAst.CommandElements.Count];
+            for (int i = 0; i < commandElements.Length; i++)
+            {
+                commandElements[i] = (CommandElementAst)dynamicKeywordStatementAst.CommandElements[i].Copy();
+            }
+            var commandAst = new CommandAst(dynamicKeywordStatementAst.Extent, commandElements, TokenKind.Unknown, null);
+            StaticBindingResult bindingResult = StaticParameterBinder.BindCommand(commandAst);
+
+            var parameterErrors = new List<ParseError>();
+            HashSet<string> mandatoryParameters = new HashSet<string>(keyword.Parameters.Values.Where(p => p.Mandatory).Select(p => p.Name));
+            Dictionary<int, string> positionalParameters = keyword.Parameters.Values.Where(p => p.Position != -1).ToDictionary(p => p.Position, p => p.Name);
+            foreach (KeyValuePair<string, ParameterBindingResult> boundParameter in bindingResult.BoundParameters)
+            {
+                // Check if the parameter is defined positionally
+                int paramPosition;
+                if (Int32.TryParse(boundParameter.Key, out paramPosition))
+                {
+                    // Make sure the positional parameter is expected
+                    if (!positionalParameters.ContainsKey(paramPosition))
+                    {
+                        var msg = String.Format("The keyword '{0}' does not support the parameter at position {1}", keyword.Keyword, paramPosition);
+                        parameterErrors.Add(new ParseError(dynamicKeywordStatementAst.Extent, "UnsupportedParameter", msg));
+                        continue;
+                    }
+
+                    if (mandatoryParameters.Contains(positionalParameters[paramPosition]))
+                    {
+                        mandatoryParameters.Remove(positionalParameters[paramPosition]);
+                    }
+
+                    continue;
+                }
+
+                // Otherwise check the parameter is defined by name
+                if (!keyword.Parameters.ContainsKey(boundParameter.Key))
+                {
+                    var msg = String.Format("The keyword '{0}' does not support the parameter '{1}'", keyword.Keyword, boundParameter.Value.Parameter.Name);
+                    parameterErrors.Add(new ParseError(dynamicKeywordStatementAst.Extent, "UnsupportedParameter", msg));
+                    continue;
+                }
+
+                if (mandatoryParameters.Contains(boundParameter.Key))
+                {
+                    mandatoryParameters.Remove(boundParameter.Key);
+                }
+            }
+
+            // If there were any parameters we needed to see but didn't, generate errors here
+            foreach (var unsetMandatoryParam in mandatoryParameters)
+            {
+                var msg = String.Format("The parameter '{0}' for keyword '{1}' was required but not provided", unsetMandatoryParam, keyword.Keyword);
+                parameterErrors.Add(new ParseError(dynamicKeywordStatementAst.Extent, "MissingMandatoryParameter", msg));
+            }
+
+            foreach (var error in parameterErrors)
+            {
+                _parser.ReportError(error);
+            }
+
             //////////////////////////////////////////////////////////////////////////////////
             // If a custom action was provided. then invoke it
             //////////////////////////////////////////////////////////////////////////////////
-            if (dynamicKeywordStatementAst.Keyword.SemanticCheck != null)
+            if (keyword.SemanticCheck != null)
             {
                 try
                 {
@@ -1211,7 +1277,6 @@ namespace System.Management.Automation.Language
                     _parser.ReportError(dynamicKeywordStatementAst.Extent, () => ParserStrings.DynamicKeywordSemanticCheckException, dynamicKeywordStatementAst.Keyword.ResourceName, e.ToString());
                 }
             }
-            DynamicKeyword keyword = dynamicKeywordStatementAst.Keyword;
             HashtableAst hashtable = dynamicKeywordStatementAst.BodyExpression as HashtableAst;
             if (hashtable != null)
             {
