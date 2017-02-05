@@ -708,11 +708,15 @@ namespace System.Management.Automation.Language
                 }
             }
 
-            Keyword keywordDefinition = (Keyword) Activator.CreateInstance(typeDefintion.AsType());
+            Type keywordType = typeDefintion.AsType();
+            // TODO: These are redundant -- the keyword should be constructed later, so parameters can be set and the keyword executed
+            Keyword keywordDefinition = (Keyword) Activator.CreateInstance(keywordType);
             keyword.PreParse = keywordDefinition.PreParse;
             keyword.PostParse = keywordDefinition.PostParse;
             keyword.SemanticCheck = keywordDefinition.SemanticCheck;
             keyword.RuntimeCall = keywordDefinition.RuntimeCall;
+            keyword.CompilationStrategy = keywordDefinition.CompilationStrategy;
+            keyword.ImplementingKeyword = keywordType;
         }
 
         private interface IGenericContext<TType>

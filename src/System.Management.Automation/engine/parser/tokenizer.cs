@@ -733,9 +733,18 @@ namespace System.Management.Automation.Language
         public Func<Dictionary<string, object>, Stack<Dictionary<string, object>>, object> RuntimeCall { get; set; }
 
         /// <summary>
-        /// 
+        /// Specifies the delegate to generate the compiler's LINQ Expression tree for this keyword. The vast
+        /// majority of keywords will use the default compilation strategy, but this exists to ensure dynamic keyword
+        /// semantics are fully configurable by implementers
         /// </summary>
         public Func<Compiler, DynamicKeywordStatementAst, Expression> CompilationStrategy { get; set; }
+
+        /// <summary>
+        /// A reference to the defined Keyword class that implements this dynamic keyword, if it was defined
+        /// with a compiled C# keyword specification module.
+        /// TODO: Refactor this and DynamicKeyword into a DynamicKeywordInfo object that specifies the metadata on a DynamicKeyword
+        /// </summary>
+        public Type ImplementingKeyword { get; set; }
     }
 
 
