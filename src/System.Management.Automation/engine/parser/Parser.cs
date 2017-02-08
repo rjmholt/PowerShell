@@ -3414,6 +3414,10 @@ namespace System.Management.Automation.Language
         /// <returns></returns>
         private StatementAst DynamicKeywordStatementRule(Token functionName, DynamicKeyword keywordData)
         {
+            // TODO: Turn this into an explicit boolean property of DynamicKeyword, or something like that
+            // to distinguish between compiled-module keywords and function-defined keywords
+            bool isFunctionDefined = keywordData.ImplementingKeyword == null;
+
             // Check the UseMode of the keyword allows its invocation
             if (!DynamicKeyword.TryRecordKeywordUse(keywordData))
             {
@@ -3470,173 +3474,290 @@ namespace System.Management.Automation.Language
             }
             else
             {
-                SkipNewlines();
-
-                // The expression that returns the resource name or names.
-                ExpressionAst instanceName = null;
-
-                Token nameToken = NextToken();
-                if (nameToken.Kind == TokenKind.EndOfInput)
+                Token lCurly = null;
+                var commandElements = new List<CommandElementAst> {
+                    new StringConstantExpressionAst(functionName.Extent, functionName.Text, StringConstantType.BareWord),
+                };
+                ExpressionAst originalInstanceName;
+                if (isFunctionDefined)
                 {
-                    UngetToken(nameToken);
+                    SkipNewlines();
 
-                    if (keywordData.NameMode == DynamicKeywordNameMode.NameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired)
+                    // The expression that returns the resource name or names.
+                    ExpressionAst instanceName = null;
+
+                    Token nameToken = NextToken();
+                    if (nameToken.Kind == TokenKind.EndOfInput)
                     {
-                        ReportIncompleteInput(After(functionName), () => ParserStrings.RequiredNameOrExpressionMissing);
+                        UngetToken(nameToken);
+
+                        if (keywordData.NameMode == DynamicKeywordNameMode.NameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired)
+                        {
+                            ReportIncompleteInput(After(functionName), () => ParserStrings.RequiredNameOrExpressionMissing);
+                        }
+                        else
+                        {
+                            // Name not required so report missing brace
+                            ReportIncompleteInput(After(functionName.Extent), () => ParserStrings.MissingBraceInObjectDefinition);
+                        }
+                        return null;
+                    }
+
+                    // If it's an lcurly, then no name was provided, and we skip to the body processing
+                    if (nameToken.Kind == TokenKind.LCurly)
+                    {
+                        lCurly = nameToken;
+                        if (keywordData.NameMode == DynamicKeywordNameMode.NameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired)
+                        {
+                            ReportError(After(functionName), () => ParserStrings.RequiredNameOrExpressionMissing);
+                            UngetToken(nameToken);
+                            return null;
+                        }
+                    }
+                    else if (nameToken.Kind == TokenKind.Identifier || nameToken.Kind == TokenKind.DynamicKeyword)
+                    {
+                        if (keywordData.NameMode == DynamicKeywordNameMode.NoName)
+                        {
+                            ReportError(After(functionName), () => ParserStrings.UnexpectedNameForType, functionName.Text, nameToken.Text);
+                            UngetToken(nameToken);
+                            return null;
+                        }
+
+                        // If it's an identifier then this is the name for the data object
+                        elementName = nameToken.Text;
+
+                        // If only a simple name is allowed, then the string must be non-null.
+                        if ((keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleOptionalName) && string.IsNullOrEmpty(elementName))
+                        {
+                            ReportIncompleteInput(After(functionName), () => ParserStrings.RequiredNameOrExpressionMissing);
+                            UngetToken(nameToken);
+                            return null;
+                        }
                     }
                     else
                     {
-                        // Name not required so report missing brace
-                        ReportIncompleteInput(After(functionName.Extent), () => ParserStrings.MissingBraceInObjectDefinition);
-                    }
-                    return null;
-                }
-
-                // If it's an lcurly, then no name was provided, and we skip to the body processing
-                Token lCurly = null;
-                if (nameToken.Kind == TokenKind.LCurly)
-                {
-                    lCurly = nameToken;
-                    if (keywordData.NameMode == DynamicKeywordNameMode.NameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired)
-                    {
-                        ReportError(After(functionName), () => ParserStrings.RequiredNameOrExpressionMissing);
+                        // see if an expression was provided instead of a bare word...
                         UngetToken(nameToken);
-                        return null;
-                    }
-                }
-                else if (nameToken.Kind == TokenKind.Identifier || nameToken.Kind == TokenKind.DynamicKeyword)
-                {
-                    if (keywordData.NameMode == DynamicKeywordNameMode.NoName)
-                    {
-                        ReportError(After(functionName), () => ParserStrings.UnexpectedNameForType, functionName.Text, nameToken.Text);
-                        UngetToken(nameToken);
-                        return null;
+                        instanceName = GetSingleCommandArgument(CommandArgumentContext.CommandName);
+
+                        if (instanceName == null)
+                        {
+                            if (keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleOptionalName)
+                            {
+                                ReportError(After(functionName), () => ParserStrings.RequiredNameOrExpressionMissing);
+                            }
+                            else
+                            {
+                                // It wasn't an '{' and it wasn't a name expression so it's a unexpected token.
+                                ReportError(After(functionName), () => ParserStrings.UnexpectedToken, nameToken.Text);
+                            }
+                            return null;
+                        }
+
+                        // Ok, we got a name expression, but we're expecting no name, so it's and error.
+                        if (keywordData.NameMode == DynamicKeywordNameMode.NoName)
+                        {
+                            ReportError(After(functionName), () => ParserStrings.UnexpectedNameForType, functionName.Text, instanceName.ToString());
+                            return null;
+                        }
+
+                        // We were expecting a simple name so report an error
+                        if (keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleOptionalName)
+                        {
+                            // If no match, then this is an incomplete token BUGBUG fix message
+                            ReportError(nameToken.Extent, () => ParserStrings.UnexpectedToken, nameToken.Text);
+                            return null;
+                        }
                     }
 
-                    // If it's an identifier then this is the name for the data object
-                    elementName = nameToken.Text;
-
-                    // If only a simple name is allowed, then the string must be non-null.
-                    if ((keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleOptionalName) && string.IsNullOrEmpty(elementName))
+                    // If we didn't get a resource expression AST, then we need to build one out of the
+                    // name that was specified. It may be the case that we don't have
+                    // a resource name in which case it will be the empty string. Even in the cases were
+                    // we aren't expecting a name, we still do this so that the signature of the implementing function remains
+                    // the same.
+                    originalInstanceName = instanceName;
+                    if (instanceName == null)
                     {
-                        ReportIncompleteInput(After(functionName), () => ParserStrings.RequiredNameOrExpressionMissing);
-                        UngetToken(nameToken);
-                        return null;
+                        instanceName = new StringConstantExpressionAst(nameToken.Extent, elementName, StringConstantType.BareWord);
                     }
+
+                    SkipNewlines();
+
+                    //
+                    // Now look for the body of the data statement.
+                    //
+                    if (lCurly == null)
+                    {
+                        lCurly = NextToken();
+
+                        if (lCurly.Kind == TokenKind.EndOfInput)
+                        {
+                            UngetToken(lCurly);
+                            ReportIncompleteInput(After(functionName.Extent), () => ParserStrings.MissingBraceInObjectDefinition);
+
+                            // Preserve the name expression for tab completion
+                            return originalInstanceName == null
+                                       ? null
+                                       : new ErrorStatementAst(ExtentOf(functionName, originalInstanceName),
+                                                               GetNestedErrorAsts(originalInstanceName));
+                        }
+
+                        if (lCurly.Kind != TokenKind.LCurly)
+                        {
+                            // We need to generate a reasonable error message for this case:
+                            //
+                            // Configuration C {
+                            //   node $AllNode.NodeName{ # There is no space before curly, and we are converting scriptblock to and argument to call 'NodeName'
+                            //     ...
+                            //   }
+                            // } # we don't want to simple report an unexpected token here, it would be super-confusing.
+
+                            InvokeMemberExpressionAst instanceInvokeMemberExpressionAst = instanceName as InvokeMemberExpressionAst;
+
+                            if (instanceInvokeMemberExpressionAst != null &&
+                                instanceInvokeMemberExpressionAst.Arguments.Count == 1 &&
+                                instanceInvokeMemberExpressionAst.Arguments[0] is ScriptBlockExpressionAst &&
+                                // the last condition checks that there is no space between "method" name and '{'
+                                instanceInvokeMemberExpressionAst.Member.Extent.EndOffset == instanceInvokeMemberExpressionAst.Arguments[0].Extent.StartOffset)
+                            {
+                                ReportError(LastCharacterOf(instanceInvokeMemberExpressionAst.Member.Extent), () => ParserStrings.UnexpectedTokenInDynamicKeyword, functionName.Text);
+                            }
+                            else
+                            {
+                                ReportError(lCurly.Extent, () => ParserStrings.UnexpectedToken, lCurly.Text);
+                            }
+
+                            if (lCurly.Kind == TokenKind.Dot && originalInstanceName != null && lCurly.Extent.StartOffset == originalInstanceName.Extent.EndOffset)
+                            {
+                                // Generate more useful ast for tab-completing extension methods on special DSC collection variables
+                                // e.g. configuration foo { node $AllNodes.<tab>
+
+                                IScriptExtent errorExtent = ExtentOf(originalInstanceName, lCurly);
+                                var errorExpr = new ErrorExpressionAst(errorExtent);
+                                var memberExpr = new MemberExpressionAst(originalInstanceName.Extent, originalInstanceName, errorExpr, @static: false);
+
+                                return new ErrorStatementAst(errorExtent, new[] { memberExpr });
+                            }
+
+                            UngetToken(lCurly);
+                            // Preserve the name expression for tab completion
+                            return originalInstanceName == null
+                                       ? null
+                                       : new ErrorStatementAst(ExtentOf(functionName, originalInstanceName),
+                                                               GetNestedErrorAsts(originalInstanceName));
+                        }
+                    }
+                    commandElements.Add((ExpressionAst)instanceName.Copy());
                 }
                 else
                 {
-                    // see if an expression was provided instead of a bare word...
-                    UngetToken(nameToken);
-                    instanceName = GetSingleCommandArgument(CommandArgumentContext.CommandName);
+                    originalInstanceName = null;
 
-                    if (instanceName == null)
+                    var oldTokenizerMode = _tokenizer.Mode;
+                    SetTokenizerMode(TokenizerMode.Command);
+                    try
                     {
-                        if (keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleOptionalName)
+                        bool scanning = true;
+                        bool foundVerbatimArgument = false;
+                        CommandArgumentContext context = CommandArgumentContext.CommandName;
+                        while (scanning)
                         {
-                            ReportError(After(functionName), () => ParserStrings.RequiredNameOrExpressionMissing);
+                            Token lookaheadToken = NextToken();
+                            switch (lookaheadToken.Kind)
+                            {
+                                case TokenKind.Pipe:
+                                case TokenKind.RCurly:
+                                case TokenKind.RParen:
+                                case TokenKind.EndOfInput:
+                                case TokenKind.NewLine:
+                                case TokenKind.Semi:
+                                case TokenKind.AndAnd:
+                                case TokenKind.OrOr:
+                                case TokenKind.MinusMinus:
+                                case TokenKind.Redirection:
+                                case TokenKind.RedirectInStd:
+                                    UngetToken(lookaheadToken);
+                                    scanning = false;
+                                    continue;
+
+                                case TokenKind.Ampersand:
+                                    ReportError(lookaheadToken.Extent, () => ParserStrings.AmpersandNotAllowed);
+                                    break;
+
+                                case TokenKind.Comma:
+                                    ReportError(lookaheadToken.Extent, () => ParserStrings.MissingArgument);
+                                    SkipNewlines();
+                                    break;
+
+                                case TokenKind.LCurly:
+                                    scanning = false;
+                                    lCurly = lookaheadToken;
+                                    continue;
+
+                                case TokenKind.Parameter:
+                                    var parameterToken = (ParameterToken)lookaheadToken;
+                                    ExpressionAst parameterArgs;
+                                    IScriptExtent extent;
+                                    if (parameterToken.UsedColon && PeekToken().Kind != TokenKind.Comma)
+                                    {
+                                        parameterArgs = GetCommandArgument(CommandArgumentContext.CommandArgument, NextToken());
+                                        if (parameterArgs == null)
+                                        {
+                                            extent = parameterToken.Extent;
+                                            ReportError(After(extent), () => ParserStrings.ParameterRequiresArgument, parameterToken.Text);
+                                        }
+                                        else
+                                        {
+                                            extent = ExtentOf(lookaheadToken, parameterArgs);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        parameterArgs = null;
+                                        extent = lookaheadToken.Extent;
+                                    }
+                                    var paramAst = new CommandParameterAst(extent, parameterToken.ParameterName, parameterArgs, lookaheadToken.Extent);
+                                    commandElements.Add(paramAst);
+                                    break;
+
+                                default:
+                                    var ast = GetCommandArgument(context, lookaheadToken);
+
+                                    // If this is the special verbatim argument syntax, look for the next element
+                                    StringToken argumentToken = lookaheadToken as StringToken;
+                                    if ((argumentToken != null) && String.Equals(argumentToken.Value, VERBATIM_ARGUMENT, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        commandElements.Add(ast);
+
+                                        var verbatimToken = GetVerbatimCommandArgumentToken();
+                                        if (verbatimToken != null)
+                                        {
+                                            foundVerbatimArgument = true;
+                                            scanning = false;
+                                            ast = new StringConstantExpressionAst(verbatimToken.Extent, verbatimToken.Value, StringConstantType.BareWord);
+                                            commandElements.Add(ast);
+                                        }
+
+                                        break;
+                                    }
+
+                                    commandElements.Add(ast);
+                                    break;
+                            }
+
+                            if (!foundVerbatimArgument)
+                            {
+                                context = CommandArgumentContext.CommandArgument;
+                                lookaheadToken = NextToken();
+                            }
                         }
-                        else
-                        {
-                            // It wasn't an '{' and it wasn't a name expression so it's a unexpected token.
-                            ReportError(After(functionName), () => ParserStrings.UnexpectedToken, nameToken.Text);
-                        }
-                        return null;
                     }
-
-                    // Ok, we got a name expression, but we're expecting no name, so it's and error.
-                    if (keywordData.NameMode == DynamicKeywordNameMode.NoName)
+                    finally
                     {
-                        ReportError(After(functionName), () => ParserStrings.UnexpectedNameForType, functionName.Text, instanceName.ToString());
-                        return null;
-                    }
-
-                    // We were expecting a simple name so report an error
-                    if (keywordData.NameMode == DynamicKeywordNameMode.SimpleNameRequired || keywordData.NameMode == DynamicKeywordNameMode.SimpleOptionalName)
-                    {
-                        // If no match, then this is an incomplete token BUGBUG fix message
-                        ReportError(nameToken.Extent, () => ParserStrings.UnexpectedToken, nameToken.Text);
-                        return null;
-                    }
-                }
-
-                // If we didn't get a resource expression AST, then we need to build one out of the
-                // name that was specified. It may be the case that we don't have
-                // a resource name in which case it will be the empty string. Even in the cases were
-                // we aren't expecting a name, we still do this so that the signature of the implementing function remains
-                // the same.
-                ExpressionAst originalInstanceName = instanceName;
-                if (instanceName == null)
-                {
-                    instanceName = new StringConstantExpressionAst(nameToken.Extent, elementName, StringConstantType.BareWord);
-                }
-
-                SkipNewlines();
-
-                //
-                // Now look for the body of the data statement.
-                //
-                if (lCurly == null)
-                {
-                    lCurly = NextToken();
-
-                    if (lCurly.Kind == TokenKind.EndOfInput)
-                    {
-                        UngetToken(lCurly);
-                        ReportIncompleteInput(After(functionName.Extent), () => ParserStrings.MissingBraceInObjectDefinition);
-
-                        // Preserve the name expression for tab completion
-                        return originalInstanceName == null
-                                   ? null
-                                   : new ErrorStatementAst(ExtentOf(functionName, originalInstanceName),
-                                                           GetNestedErrorAsts(originalInstanceName));
-                    }
-
-                    if (lCurly.Kind != TokenKind.LCurly)
-                    {
-                        // We need to generate a reasonable error message for this case:
-                        //
-                        // Configuration C {
-                        //   node $AllNode.NodeName{ # There is no space before curly, and we are converting scriptblock to and argument to call 'NodeName'
-                        //     ...
-                        //   }
-                        // } # we don't want to simple report an unexpected token here, it would be super-confusing.
-
-                        InvokeMemberExpressionAst instanceInvokeMemberExpressionAst = instanceName as InvokeMemberExpressionAst;
-
-                        if (instanceInvokeMemberExpressionAst != null &&
-                            instanceInvokeMemberExpressionAst.Arguments.Count == 1 &&
-                            instanceInvokeMemberExpressionAst.Arguments[0] is ScriptBlockExpressionAst &&
-                            // the last condition checks that there is no space between "method" name and '{'
-                            instanceInvokeMemberExpressionAst.Member.Extent.EndOffset == instanceInvokeMemberExpressionAst.Arguments[0].Extent.StartOffset)
-                        {
-                            ReportError(LastCharacterOf(instanceInvokeMemberExpressionAst.Member.Extent), () => ParserStrings.UnexpectedTokenInDynamicKeyword, functionName.Text);
-                        }
-                        else
-                        {
-                            ReportError(lCurly.Extent, () => ParserStrings.UnexpectedToken, lCurly.Text);
-                        }
-
-                        if (lCurly.Kind == TokenKind.Dot && originalInstanceName != null && lCurly.Extent.StartOffset == originalInstanceName.Extent.EndOffset)
-                        {
-                            // Generate more useful ast for tab-completing extension methods on special DSC collection variables
-                            // e.g. configuration foo { node $AllNodes.<tab>
-
-                            IScriptExtent errorExtent = ExtentOf(originalInstanceName, lCurly);
-                            var errorExpr = new ErrorExpressionAst(errorExtent);
-                            var memberExpr = new MemberExpressionAst(originalInstanceName.Extent, originalInstanceName, errorExpr, @static: false);
-
-                            return new ErrorStatementAst(errorExtent, new[] { memberExpr });
-                        }
-
-                        UngetToken(lCurly);
-                        // Preserve the name expression for tab completion
-                        return originalInstanceName == null
-                                   ? null
-                                   : new ErrorStatementAst(ExtentOf(functionName, originalInstanceName),
-                                                           GetNestedErrorAsts(originalInstanceName));
+                        SetTokenizerMode(oldTokenizerMode);
                     }
                 }
+
 
                 //
                 // The keyword data is used to see
@@ -3711,10 +3832,12 @@ namespace System.Management.Automation.Language
                     ReportIncompleteInput(After(lCurly), () => ParserStrings.MissingStatementAfterKeyword, keywordData.Keyword);
 
                     // Preserve the name expression for tab completion
-                    return originalInstanceName == null
-                               ? null
-                               : new ErrorStatementAst(ExtentOf(functionName, originalInstanceName),
+                    if (isFunctionDefined && commandElements[1] != null)
+                    {
+                        return new ErrorStatementAst(ExtentOf(functionName, originalInstanceName),
                                                        GetNestedErrorAsts(originalInstanceName));
+                    }
+                    return null;
                 }
 
                 //////////////////////////////////////////////////////////////////////////
@@ -3724,25 +3847,34 @@ namespace System.Management.Automation.Language
                 //
                 // Create DynamicKeywordStatementAst
                 //
-                Collection<CommandElementAst> commandElements = new Collection<CommandElementAst>
-                {
-                    new StringConstantExpressionAst(functionName.Extent, functionName.Text, StringConstantType.BareWord),
-                    (ExpressionAst)instanceName.Copy(),
-                    (ExpressionAst)body.Copy()
-                };
+                commandElements.Add((ExpressionAst)body.Copy());
                 Token nextToken = NextToken();
                 IScriptExtent dynamicKeywordExtent = ExtentOf(functionName, Before(nextToken));
                 UngetToken(nextToken);
-                dynamicKeywordAst = new DynamicKeywordStatementAst(dynamicKeywordExtent, commandElements)
+
+                if (isFunctionDefined)
                 {
-                    Keyword = keywordData,
-                    LCurly = lCurly,
-                    FunctionName = functionName,
-                    InstanceName = instanceName,
-                    OriginalInstanceName = originalInstanceName,
-                    BodyExpression = body,
-                    ElementName = elementName,
-                };
+                    dynamicKeywordAst = new DynamicKeywordStatementAst(dynamicKeywordExtent, commandElements)
+                    {
+                        Keyword = keywordData,
+                        LCurly = lCurly,
+                        FunctionName = functionName,
+                        InstanceName = (ExpressionAst)commandElements[1],
+                        OriginalInstanceName = originalInstanceName,
+                        BodyExpression = body,
+                        ElementName = elementName,
+                    };
+                }
+                else
+                {
+                    dynamicKeywordAst = new DynamicKeywordStatementAst(dynamicKeywordExtent, commandElements)
+                    {
+                        Keyword = keywordData,
+                        LCurly = lCurly,
+                        FunctionName = functionName,
+                        BodyExpression = body
+                    };
+                }
             }
 
             //////////////////////////////////////////////////////////////////////////////////
