@@ -2958,7 +2958,7 @@ namespace System.Management.Automation.Language
 
             if (dynamicKeywordAst.Keyword.CompilationStrategy != null)
             {
-                return dynamicKeywordAst.Keyword.CompilationStrategy(this, dynamicKeywordAst);
+                return dynamicKeywordAst.Keyword.CompilationStrategy(this, _executionContextParameter, dynamicKeywordAst);
             }
 
             return this.VisitPipeline(dynamicKeywordAst.GenerateCommandCallPipelineAst());

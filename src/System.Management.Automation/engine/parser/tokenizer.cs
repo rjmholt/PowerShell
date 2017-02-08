@@ -586,6 +586,9 @@ namespace System.Management.Automation.Language
             PostParse = other.PostParse;
             SemanticCheck = other.SemanticCheck;
             RuntimeCall = other.RuntimeCall;
+            CompilationStrategy = other.CompilationStrategy;
+            ImplementingKeyword = other.ImplementingKeyword;
+            CachedKeywordConstructor = other.CachedKeywordConstructor;
             foreach (KeyValuePair<string, DynamicKeywordProperty> entry in other.Properties)
             {
                 Properties.Add(entry.Key, new DynamicKeywordProperty(entry.Value));
@@ -730,14 +733,14 @@ namespace System.Management.Automation.Language
         /// A custom function that determines the behavior of the DynamicKeyword when invoked at runtime, if set.
         /// This overrides the "ImplementingModule\KeywordName" function definition mechanism, if set.
         /// </summary>
-        public Func<Dictionary<string, object>, Stack<Dictionary<string, object>>, object> RuntimeCall { get; set; }
+        public Func<Keyword, Stack<Keyword>, object> RuntimeCall { get; set; }
 
         /// <summary>
         /// Specifies the delegate to generate the compiler's LINQ Expression tree for this keyword. The vast
         /// majority of keywords will use the default compilation strategy, but this exists to ensure dynamic keyword
         /// semantics are fully configurable by implementers
         /// </summary>
-        public Func<Compiler, DynamicKeywordStatementAst, Expression> CompilationStrategy { get; set; }
+        public Func<Compiler, ParameterExpression, DynamicKeywordStatementAst, Expression> CompilationStrategy { get; set; }
 
         /// <summary>
         /// A reference to the defined Keyword class that implements this dynamic keyword, if it was defined
@@ -745,6 +748,10 @@ namespace System.Management.Automation.Language
         /// TODO: Refactor this and DynamicKeyword into a DynamicKeywordInfo object that specifies the metadata on a DynamicKeyword
         /// </summary>
         public Type ImplementingKeyword { get; set; }
+
+        internal Func<Keyword> CachedKeywordConstructor { get; set; }
+
+        internal bool IsNested { get; set; }
     }
 
 

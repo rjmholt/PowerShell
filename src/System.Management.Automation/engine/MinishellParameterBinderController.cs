@@ -56,7 +56,7 @@ namespace System.Management.Automation
         Collection<CommandParameterInternal>
         BindParameters(Collection<CommandParameterInternal> parameters)
         {
-            Dbg.Assert(false, "this method should be used");
+            Dbg.Assert(false, "this method should not be used");
             return null;
         }
 

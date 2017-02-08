@@ -1758,6 +1758,37 @@ namespace System.Management.Automation
 
         #endregion Cmdlets
 
+        #region DynamicKeywords
+
+        /// <summary>
+        /// The accumulated results of DynamicKeyword calls in this scope level
+        /// </summary>
+        public List<object> DynamicKeywordResults
+        {
+            get
+            {
+                return _dynamicKeywordResults ??
+                    (_dynamicKeywordResults = new List<object>());
+            }
+        }
+        private List<object> _dynamicKeywordResults;
+
+
+        /// <summary>
+        /// A stack of DynamicKeywords from the top invocation down to the current usage
+        /// </summary>
+        public Stack<Language.Keyword> DynamicKeywordScope
+        {
+            get
+            {
+                return _dynamicKeywordScope ??
+                    (_dynamicKeywordScope = new Stack<Language.Keyword>());
+            }
+        }
+        private Stack<Language.Keyword> _dynamicKeywordScope;
+
+        #endregion
+
         #region Types
 
         private Language.TypeResolutionState _typeResolutionState;

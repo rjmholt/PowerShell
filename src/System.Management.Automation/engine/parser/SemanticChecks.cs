@@ -1197,6 +1197,7 @@ namespace System.Management.Automation.Language
         {
             DynamicKeyword keyword = dynamicKeywordStatementAst.Keyword;
 
+            /*
             ////////////////////////////////////////////////////////////////////////////////////
             // Check the parameters given against any parameter specifications on the keyword
             ////////////////////////////////////////////////////////////////////////////////////
@@ -1221,7 +1222,7 @@ namespace System.Management.Automation.Language
                     // Make sure the positional parameter is expected
                     if (!positionalParameters.ContainsKey(paramPosition))
                     {
-                        var msg = String.Format("The keyword '{0}' does not support the parameter at position {1}", keyword.Keyword, paramPosition);
+                        var msg = String.Format("The keyword '{0}' does not support the parameter '{1}' at position {2}", keyword.Keyword, boundParameter.Value.Value, paramPosition);
                         _parser.ReportError(new ParseError(dynamicKeywordStatementAst.Extent, "UnsupportedParameter", msg));
                         continue;
                     }
@@ -1237,7 +1238,7 @@ namespace System.Management.Automation.Language
                 // Otherwise check the parameter is defined by name
                 if (!keyword.Parameters.ContainsKey(boundParameter.Key))
                 {
-                    var msg = String.Format("The keyword '{0}' does not support the parameter '{1}'", keyword.Keyword, boundParameter.Value.Parameter.Name);
+                    var msg = String.Format("The keyword '{0}' does not support the parameter '{1}' of name '{2}'", keyword.Keyword, boundParameter.Value.Value, boundParameter.Value.Parameter.Name);
                     _parser.ReportError(new ParseError(dynamicKeywordStatementAst.Extent, "UnsupportedParameter", msg));
                     continue;
                 }
@@ -1254,6 +1255,7 @@ namespace System.Management.Automation.Language
                 var msg = String.Format("The parameter '{0}' for keyword '{1}' was required but not provided", unsetMandatoryParam, keyword.Keyword);
                 _parser.ReportError(new ParseError(dynamicKeywordStatementAst.Extent, "MissingMandatoryParameter", msg));
             }
+            */
 
             //////////////////////////////////////////////////////////////////////////////////
             // If a custom action was provided. then invoke it

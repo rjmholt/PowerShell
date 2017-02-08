@@ -72,7 +72,7 @@ namespace System.Management.Automation.Language
         /// <summary>
         /// Specifies the call to be made at runtime for the keyword invocation
         /// </summary>
-        public Func<Dictionary<string, object>, Stack<Dictionary<string, object>>, object> RuntimeCall
+        public Func<Keyword, Stack<Keyword>, object> RuntimeCall
         {
             get; set;
         }
@@ -81,7 +81,7 @@ namespace System.Management.Automation.Language
         /// Allows the specification of a new compilation algorithm, allowing the definition of
         /// arbitrary DynamicKeywordStatementAst semantics
         /// </summary>
-        public Func<Compiler, DynamicKeywordStatementAst, Expression> CompilationStrategy
+        public Func<Compiler, ParameterExpression, DynamicKeywordStatementAst, Expression> CompilationStrategy
         {
             get; set;
         }
@@ -98,25 +98,304 @@ namespace System.Management.Automation.Language
             return StaticParameterBinder.BindCommand(commandAst);
         }
 
-        private static Expression DefaultCompilationStrategy(Compiler compiler, DynamicKeywordStatementAst kwAst)
+        private static Expression DefaultCompilationStrategy(Compiler compiler, ParameterExpression contextVariable, DynamicKeywordStatementAst kwAst)
         {
+            // If there is no RuntimeCall, do nothing
             if (kwAst.Keyword.RuntimeCall == null)
             {
                 return Expression.Empty();
             }
 
-            var args = new Expression[kwAst.CommandElements.Count];
-            for (int i = 0; i < kwAst.CommandElements.Count; i++)
+            // Get the keyword constructor
+            Expression<Func<Keyword>> keywordCtor = () => kwAst.Keyword.CachedKeywordConstructor();
+
+            Expression invocationCall = null;
+            switch (kwAst.Keyword.BodyMode)
             {
-                args[i] = compiler.VisitCommandElement(kwAst.CommandElements[i]);
+                case DynamicKeywordBodyMode.Command:
+                    // Compile any arguments
+                    var cmdArgs = new Expression[kwAst.CommandElements.Count-1];
+                    for (int i = 1; i < kwAst.CommandElements.Count; i++)
+                    {
+                        cmdArgs[i-1] = compiler.VisitCommandElement(kwAst.CommandElements[i]);
+                    }
+
+                    Expression cmdArgsArray = Expression.NewArrayInit(typeof(CommandParameterInternal), cmdArgs);
+
+                    // Compile the keyword invocation itself
+                    invocationCall = Expression.Call(KeywordProcessorCache.CachedInvokeCommandKeyword, contextVariable, keywordCtor, cmdArgsArray);
+                    break;
+
+                case DynamicKeywordBodyMode.Hashtable:
+                    // Compile any arguments
+                    var hashtableArgs = new Expression[kwAst.CommandElements.Count-2];
+                    for (int i = 1; i < kwAst.CommandElements.Count - 1; i++)
+                    {
+                        hashtableArgs[i-1] = compiler.VisitCommandElement(kwAst.CommandElements[i]);
+                    }
+
+                    Expression hashtableArgsArray = Expression.NewArrayInit(typeof(CommandParameterInternal), hashtableArgs);
+
+                    // Compile the hashtable body
+                    Expression body = compiler.Compile(kwAst.BodyExpression);
+
+                    // Compile the keyword invocation, passing in the arguments and hashtable body
+                    invocationCall = Expression.Call(KeywordProcessorCache.CachedInvokeHashtableKeyword, contextVariable, keywordCtor, hashtableArgsArray, body);
+                    break;
+
+                case DynamicKeywordBodyMode.ScriptBlock:
+                    // Compile the argument elements
+                    var scriptBlockArgs = new Expression[kwAst.CommandElements.Count-2];
+                    for (int i = 1; i < kwAst.CommandElements.Count - 1; i++)
+                    {
+                        scriptBlockArgs[i-1] = compiler.VisitCommandElement(kwAst.CommandElements[i]);
+                    }
+
+                    Expression scriptBlockArgsArray = Expression.NewArrayInit(typeof(CommandParameterInternal), scriptBlockArgs);
+
+                    // Compile the child scriptblock
+                    Expression childBlock = compiler.Compile(kwAst.BodyExpression);
+
+                    // Compile the stack pop after the keyword and its children have been executed
+                    Expression stackPop = Expression.Call(KeywordProcessorCache.CachedPopStack, contextVariable);
+
+                    // Compile the keyword invocation itself, passing in the arguments and the child block
+                    Expression topInvocation = Expression.Call(KeywordProcessorCache.CachedInvokeScriptBlockKeyword, contextVariable, keywordCtor, scriptBlockArgsArray);
+                    ParameterExpression temp = Expression.Variable(typeof(object));
+                    Expression topInvokeAssign = Expression.Assign(temp, topInvocation);
+
+                    invocationCall = Expression.Block(typeof(object), new[] { temp }, topInvokeAssign, childBlock, stackPop, temp);
+                    break;
+
+                default:
+                    throw PSTraceSource.NewArgumentOutOfRangeException(nameof(kwAst.Keyword.BodyMode), kwAst.Keyword.BodyMode);
             }
 
-            Expression<Func<Dictionary<string, object>, Stack<Dictionary<string, object>>, object>> runtimeFunc = (vars, state) => kwAst.Keyword.RuntimeCall(vars, state);
-            Expression runtimeInvocation = Expression.Invoke(runtimeFunc, Expression.Constant(kwAst));
+            // Compile arguments and subexpressions of the keyword
+            if (invocationCall == null)
+            {
+                return Expression.Empty();
+            }
 
-            // TODO: Add parameter passing and recursive scriptblock compilation
+            return compiler.CallAddCurrentPipe(invocationCall);
+        }
+    }
 
-            return compiler.CallAddCurrentPipe(runtimeInvocation);
+    /// <summary>
+    /// Static class to hold cached reflection-resolved functions for the compiler to call with DynamicKeywords
+    /// </summary>
+    internal static class KeywordProcessorCache
+    {
+        private const BindingFlags staticFlags = BindingFlags.Static | BindingFlags.NonPublic;
+
+        public static readonly MethodInfo CachedInvokeCommandKeyword;
+        public static readonly MethodInfo CachedInvokeHashtableKeyword;
+        public static readonly MethodInfo CachedInvokeScriptBlockKeyword;
+
+        public static readonly MethodInfo CachedPopStack;
+
+        static KeywordProcessorCache()
+        {
+            CachedInvokeCommandKeyword = typeof(KeywordProcessorCache).GetMethod(nameof(InvokeCommandKeyword), staticFlags);
+            CachedInvokeHashtableKeyword = typeof(KeywordProcessorCache).GetMethod(nameof(InvokeHashtableKeyword), staticFlags);
+            CachedInvokeScriptBlockKeyword = typeof(KeywordProcessorCache).GetMethod(nameof(InvokeScriptBlockKeyword), staticFlags);
+
+            CachedPopStack = typeof(KeywordProcessorCache).GetMethod(nameof(PopKeywordStack), staticFlags);
+        }
+
+        /// <summary>
+        /// Execute a command keyword by trying to instantiate the keyword object with the parameters given
+        /// and executing the runtime call provided. Returns the result of the keyword execution.
+        /// </summary>
+        /// <param name="context">the execution context the keyword runs in, provided for keyword state passing</param>
+        /// <param name="keywordCtor">the constructor to build a keyword instance</param>
+        /// <param name="parameters">the parameters passed to the keyword</param>
+        /// <returns></returns>
+        private static object InvokeCommandKeyword(ExecutionContext context, Func<Keyword> keywordCtor, CommandParameterInternal[] parameters)
+        {
+            Keyword keyword = InstantiateKeyword(keywordCtor, parameters);
+            return keyword.RuntimeCall(keyword, context.EngineSessionState.CurrentScope.DynamicKeywordScope);
+        }
+
+        /// <summary>
+        /// Execute a hashtable-bodied dynamic keyword with the parameters and body given and return the result
+        /// </summary>
+        /// <param name="context"></param>
+        /// <param name="keywordCtor"></param>
+        /// <param name="parameters"></param>
+        /// <param name="body"></param>
+        /// <returns></returns>
+        private static object InvokeHashtableKeyword(ExecutionContext context, Func<Keyword> keywordCtor, CommandParameterInternal[] parameters, Hashtable body)
+        {
+            Keyword keyword = InstantiateKeyword(keywordCtor, parameters);
+            AssignHashtableProperties(keyword, body);
+            context.EngineSessionState.CurrentScope.DynamicKeywordScope.Push(keyword);
+            return keyword.RuntimeCall(keyword, context.EngineSessionState.CurrentScope.DynamicKeywordScope);
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="context"></param>
+        /// <param name="keywordCtor"></param>
+        /// <param name="parameters"></param>
+        /// <returns></returns>
+        private static object InvokeScriptBlockKeyword(ExecutionContext context, Func<Keyword> keywordCtor, CommandParameterInternal[] parameters)
+        {
+            Keyword keyword = InstantiateKeyword(keywordCtor, parameters);
+            context.EngineSessionState.CurrentScope.DynamicKeywordScope.Push(keyword);
+            return keyword.RuntimeCall(keyword, context.EngineSessionState.CurrentScope.DynamicKeywordScope);
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="context"></param>
+        private static void PopKeywordStack(ExecutionContext context)
+        {
+            context.EngineSessionState.CurrentScope.DynamicKeywordScope.Pop();
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="context"></param>
+        /// <param name="result"></param>
+        private static void AddToKeywordResultList(ExecutionContext context, object result)
+        {
+            context.EngineSessionState.CurrentScope.DynamicKeywordResults.Add(result);
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="context"></param>
+        private static void ResetKeywordResultList(ExecutionContext context)
+        {
+            context.EngineSessionState.CurrentScope.DynamicKeywordResults.Clear();
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="keywordCtor"></param>
+        /// <param name="parameters"></param>
+        /// <returns></returns>
+        private static Keyword InstantiateKeyword(Func<Keyword> keywordCtor, CommandParameterInternal[] parameters)
+        {
+            Keyword keyword = keywordCtor();
+            BindKeywordParameters(keyword, parameters);
+            return keyword;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="keyword"></param>
+        /// <param name="parameters"></param>
+        private static void BindKeywordParameters(Keyword keyword, CommandParameterInternal[] parameters)
+        {
+            // TODO: Cache all this at parse time and pass it in when compiled
+            TypeInfo keywordType = keyword.GetType().GetTypeInfo();
+            ImmutableDictionary<string, PropertyInfo> keywordParameters = keywordType.DeclaredProperties
+                .Where(p => p.GetCustomAttribute<KeywordParameterAttribute>() != null)
+                .ToImmutableDictionary(p => p.Name, p => p);
+
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                CommandParameterInternal currParam = parameters[i];
+                string parameterName;
+                object parameterValue;
+
+                if (currParam.ParameterAndArgumentSpecified)
+                {
+                    parameterName = currParam.ParameterName;
+                    parameterValue = currParam.ArgumentValue;
+                }
+                else
+                {
+                    // Look ahead for the parameter argument we expect
+                    i++;
+                    if (currParam.ParameterNameSpecified && i < parameters.Length)
+                    {
+                        parameterName = currParam.ParameterName;
+                        currParam = parameters[i];
+                        if (currParam.ArgumentSpecified)
+                        {
+                            if (currParam.ParameterNameSpecified)
+                            {
+                                throw new RuntimeException("Parameter given when argument expected: " + currParam.ParameterText);
+                            }
+
+                            parameterValue = currParam.ArgumentValue;
+                        }
+                        else
+                        {
+                            throw new RuntimeException("Bad argument value :" + currParam.ParameterText);
+                        }
+                    }
+                    else if (!currParam.ParameterNameSpecified)
+                    {
+                        throw new RuntimeException("Bad unnamed parameter: " + currParam.ParameterText);
+                    }
+                    else
+                    {
+                        throw new RuntimeException("Bad parameter with no argument: " + currParam.ParameterText);
+                    }
+                }
+
+                if (!keywordParameters.ContainsKey(parameterName))
+                {
+                    var msg = String.Format("Unknown parameter: '-{0}: {1}'", parameterName, parameterValue);
+                    throw new RuntimeException(msg);
+                }
+
+                PropertyInfo parameterInfo = keywordParameters[parameterName];
+                if (!parameterInfo.PropertyType.IsAssignableFrom(parameterValue.GetType()))
+                {
+                    var msg = String.Format("Bad parameter type: '-{0}: {1}'", parameterName, parameterValue);
+                    throw new RuntimeException(msg);
+                }
+
+                parameterInfo.SetValue(keyword, parameterValue);
+            }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="keyword"></param>
+        /// <param name="hashtable"></param>
+        private static void AssignHashtableProperties(Keyword keyword, Hashtable hashtable)
+        {
+            TypeInfo keywordTypeInfo = keyword.GetType().GetTypeInfo();
+            ImmutableDictionary<string, PropertyInfo> keywordProperties = keywordTypeInfo.DeclaredProperties
+                .Where(p => p.GetCustomAttribute<KeywordPropertyAttribute>() != null)
+                .ToImmutableDictionary(p => p.Name, p => p);
+
+            foreach (KeyValuePair<object, object> hashtableEntry in hashtable)
+            {
+                string keywordPropertyName = hashtableEntry.Key as string;
+                if (keywordPropertyName == null)
+                {
+                    throw new RuntimeException("Hashtable-bodied DynamicKeywords must have string-typed keys");
+                }
+
+                if (!keywordProperties.ContainsKey(keywordPropertyName))
+                {
+                    var msg = String.Format("Keyword '{0}' has no property '{1}'", keyword.GetType(), keywordPropertyName);
+                    throw new RuntimeException(msg);
+                }
+
+                PropertyInfo keywordProperty = keywordProperties[keywordPropertyName];
+                if (!keywordProperty.PropertyType.IsAssignableFrom(hashtableEntry.Value.GetType()))
+                {
+                    var msg = String.Format("The property '{0}' of the keyword '{1}' has type '{2}' and is not assignable by '{3}' (type '{4}')",
+                        keywordPropertyName, keyword.GetType(), keywordProperty.PropertyType, hashtableEntry.Value, hashtableEntry.Value.GetType());
+                }
+
+                keywordProperty.SetValue(keyword, hashtableEntry.Value);
+            }
         }
     }
 
@@ -455,7 +734,9 @@ namespace System.Management.Automation.Language
                         // TODO: Make this more user-consumable
                         throw PSTraceSource.NewNotSupportedException("Cannot define keywords underneath a command-body keyword");
                     }
-                    innerKeywords.Add(ReadKeywordSpecification(innerTypeDef));
+                    DynamicKeyword innerKeyword = ReadKeywordSpecification(innerTypeDef);
+                    innerKeyword.IsNested = true;
+                    innerKeywords.Add(innerKeyword);
                 }
             }
             _keywordDefinitionStack.Pop();
@@ -708,9 +989,12 @@ namespace System.Management.Automation.Language
                 }
             }
 
-            Type keywordType = typeDefintion.AsType();
             // TODO: These are redundant -- the keyword should be constructed later, so parameters can be set and the keyword executed
-            Keyword keywordDefinition = (Keyword) Activator.CreateInstance(keywordType);
+
+            Type keywordType = typeDefintion.AsType();
+
+            keyword.CachedKeywordConstructor = () => (Keyword) Activator.CreateInstance(keywordType);
+            Keyword keywordDefinition = keyword.CachedKeywordConstructor();
             keyword.PreParse = keywordDefinition.PreParse;
             keyword.PostParse = keywordDefinition.PostParse;
             keyword.SemanticCheck = keywordDefinition.SemanticCheck;
