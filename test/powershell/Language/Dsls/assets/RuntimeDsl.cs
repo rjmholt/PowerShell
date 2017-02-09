@@ -10,10 +10,10 @@ public class SimpleRuntimeKeyword : Keyword
 {
     public SimpleRuntimeKeyword()
     {
-        RuntimeCall = TestExecution;
+        RuntimeEnterScopeCall = TestExecution;
     }
 
-    private static object TestExecution(Keyword thisKeyword, Stack<Keyword> keywordStack)
+    private static object TestExecution(Keyword thisKeyword, IEnumerable<Tuple<Keyword, object>> keywordStack)
     {
         throw new Exception("Evil");
     }
@@ -24,7 +24,7 @@ public class ParameterizedRuntimeKeyword : Keyword
 {
     public ParameterizedRuntimeKeyword()
     {
-        RuntimeCall = (thisKeyword, keywordStack) => {
+        RuntimeLeaveScopeCall = (thisKeyword, keywordStack, childResults) => {
             return "Your greeting was: " + Greeting;
         };
     }
@@ -38,9 +38,17 @@ public class OuterRuntimeKeyword : Keyword
 {
     public OuterRuntimeKeyword()
     {
-        RuntimeCall = (thisKeyword, keywordStack) => {
-            return "I'm outside";
-        };
+        RuntimeLeaveScopeCall = DeliverResults;
+
+        List<object> DeliverResults(Keyword thisKeyword, IEnumerable<Tuple<Keyword, object>> keywordStack, List<object> childResults)
+        {
+            var results = new List<object>{ "I'm outside" };
+            foreach (var result in childResults)
+            {
+                results.Add(result);
+            }
+            return results;
+        }
     }
 
     [Keyword()]
@@ -48,7 +56,7 @@ public class OuterRuntimeKeyword : Keyword
     {
         public InnerRuntimeKeyword()
         {
-            RuntimeCall = (thisKeyword, keywordStack) => {
+            RuntimeLeaveScopeCall = (thisKeyword, keywordStack, childResults) => {
                 return "I'm inside";
             };
         }
@@ -72,8 +80,22 @@ public class CustomTypeKeyword : Keyword
 {
     public CustomTypeKeyword()
     {
-        RuntimeCall = (thisKeyword, keywordStack) => {
-            return new MyData(7, "Hello");
+        DataNum = 7;
+        DataString = "Hello";
+
+        RuntimeLeaveScopeCall = (thisKeyword, keywordStack, childResults) => {
+            var keyword = thisKeyword as CustomTypeKeyword;
+            if (keyword == null)
+            {
+                throw new ArgumentOutOfRangeException("Must call keyword on itself");
+            }
+            return new MyData(keyword.DataNum, keyword.DataString);
         };
     }
+
+    [KeywordParameter()]
+    public int DataNum { get; set; }
+
+    [KeywordParameter()]
+    public string DataString { get; set; }
 }

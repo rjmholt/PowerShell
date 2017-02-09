@@ -1760,32 +1760,15 @@ namespace System.Management.Automation
 
         #region DynamicKeywords
 
-        /// <summary>
-        /// The accumulated results of DynamicKeyword calls in this scope level
-        /// </summary>
-        public List<object> DynamicKeywordResults
+        public Language.DynamicKeywordRuntimeContext DynamicKeywordRuntime
         {
             get
             {
-                return _dynamicKeywordResults ??
-                    (_dynamicKeywordResults = new List<object>());
+                return _dynamicKeywordRuntime ??
+                    (_dynamicKeywordRuntime = new Language.DynamicKeywordRuntimeContext());
             }
         }
-        private List<object> _dynamicKeywordResults;
-
-
-        /// <summary>
-        /// A stack of DynamicKeywords from the top invocation down to the current usage
-        /// </summary>
-        public Stack<Language.Keyword> DynamicKeywordScope
-        {
-            get
-            {
-                return _dynamicKeywordScope ??
-                    (_dynamicKeywordScope = new Stack<Language.Keyword>());
-            }
-        }
-        private Stack<Language.Keyword> _dynamicKeywordScope;
+        private Language.DynamicKeywordRuntimeContext _dynamicKeywordRuntime;
 
         #endregion
 

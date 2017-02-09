@@ -585,7 +585,8 @@ namespace System.Management.Automation.Language
             PreParse = other.PreParse;
             PostParse = other.PostParse;
             SemanticCheck = other.SemanticCheck;
-            RuntimeCall = other.RuntimeCall;
+            RuntimeEnterCall = other.RuntimeEnterCall;
+            RuntimeLeaveCall = other.RuntimeLeaveCall;
             CompilationStrategy = other.CompilationStrategy;
             ImplementingKeyword = other.ImplementingKeyword;
             CachedKeywordConstructor = other.CachedKeywordConstructor;
@@ -730,10 +731,23 @@ namespace System.Management.Automation.Language
         public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck { get; set; }
 
         /// <summary>
-        /// A custom function that determines the behavior of the DynamicKeyword when invoked at runtime, if set.
+        /// A custom function that determines the behavior of the DynamicKeyword as its runtime scope is entered, if set.
         /// This overrides the "ImplementingModule\KeywordName" function definition mechanism, if set.
         /// </summary>
-        public Func<Keyword, Stack<Keyword>, object> RuntimeCall { get; set; }
+        public Func<Keyword, IEnumerable<Tuple<Keyword, object>>, object> RuntimeEnterCall { get; set; }
+
+        /// <summary>
+        /// A custom function that determines the behavior of the DynamicKeyword as its runtime scope is left, if set.
+        /// This overrides the "ImplementingModule\KeywordName" function definition when set.
+        /// <para>
+        /// The delegate types refer to:
+        ///   Keyword: the keyword instance (since we use a static delegate so a null check can check implementation, we need to give it the instance)
+        ///   IEnumerable&lt;Tuple&lt;Keyword, object&gt;&gt;: the stack of parent keywords
+        ///   List&lt;object&gt;: the results of child keywords, for this keyword to aggregate
+        ///   object: the keyword execution result
+        /// </para>
+        /// </summary>
+        public Func<Keyword, IEnumerable<Tuple<Keyword, object>>, List<object>, object> RuntimeLeaveCall { get; set; }
 
         /// <summary>
         /// Specifies the delegate to generate the compiler's LINQ Expression tree for this keyword. The vast

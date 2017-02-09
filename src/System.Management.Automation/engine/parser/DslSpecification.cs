@@ -38,7 +38,8 @@ namespace System.Management.Automation.Language
             PreParse = null;
             PostParse = null;
             SemanticCheck = null;
-            RuntimeCall = null;
+            RuntimeEnterScopeCall = null;
+            RuntimeLeaveScopeCall = null;
             CompilationStrategy = DefaultCompilationStrategy;
         }
 
@@ -70,12 +71,21 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// Specifies the call to be made at runtime for the keyword invocation
+        /// Specifies the call to be made at runtime when the keyword is first executed (before it's children)
         /// </summary>
-        public Func<Keyword, Stack<Keyword>, object> RuntimeCall
+        public Func<Keyword, IEnumerable<Tuple<Keyword, object>>, object> RuntimeEnterScopeCall
         {
             get; set;
         }
+
+        /// <summary>
+        /// Specifies the call to be made at runtime by the keyword after its children have been executed
+        /// </summary>
+        public Func<Keyword, IEnumerable<Tuple<Keyword, object>>, List<object>, object> RuntimeLeaveScopeCall
+        {
+            get; set;
+        }
+
 
         /// <summary>
         /// Allows the specification of a new compilation algorithm, allowing the definition of
@@ -86,27 +96,15 @@ namespace System.Management.Automation.Language
             get; set;
         }
 
-        /// <summary>
-        /// Resolves a keyword command into Ast components
-        /// </summary>
-        /// <param name="kwAst">dynamic keyword statement ast node</param>
-        /// <returns></returns>
-        protected StaticBindingResult ParameterResolutionHelper(DynamicKeywordStatementAst kwAst)
-        {
-            var commandElements = Ast.CopyElements(kwAst.CommandElements);
-            var commandAst = new CommandAst(kwAst.Extent, commandElements, TokenKind.Unknown, null);
-            return StaticParameterBinder.BindCommand(commandAst);
-        }
-
         private static Expression DefaultCompilationStrategy(Compiler compiler, ParameterExpression contextVariable, DynamicKeywordStatementAst kwAst)
         {
             // If there is no RuntimeCall, do nothing
-            if (kwAst.Keyword.RuntimeCall == null)
+            if (kwAst.Keyword.RuntimeEnterCall == null && kwAst.Keyword.RuntimeLeaveCall == null)
             {
                 return Expression.Empty();
             }
 
-            // Get the keyword constructor
+            // Get the keyword constructor by getting the C# compiler to reinterpret the delegate from earlier
             Expression<Func<Keyword>> keywordCtor = () => kwAst.Keyword.CachedKeywordConstructor();
 
             Expression invocationCall = null;
@@ -153,18 +151,23 @@ namespace System.Management.Automation.Language
 
                     Expression scriptBlockArgsArray = Expression.NewArrayInit(typeof(CommandParameterInternal), scriptBlockArgs);
 
-                    // Compile the child scriptblock
-                    Expression childBlock = compiler.Compile(kwAst.BodyExpression);
+                    // Compile the child scriptblock by ripping out the statements and creating a false statement block
+                    // TODO: This will tacitly ignore any other usual script block features, so we should warn about that.
+                    //       Currently, those features would be unlikely to present anything useful, to my knowledge
+                    ScriptBlockExpressionAst bodyScriptBlock = kwAst.BodyExpression as ScriptBlockExpressionAst;
+                    if (bodyScriptBlock == null)
+                    {
+                        throw PSTraceSource.NewArgumentOutOfRangeException(nameof(kwAst.BodyExpression), kwAst.BodyExpression);
+                    }
 
-                    // Compile the stack pop after the keyword and its children have been executed
-                    Expression stackPop = Expression.Call(KeywordProcessorCache.CachedPopStack, contextVariable);
+                    var statementBody = new StatementBlockAst(bodyScriptBlock.Extent, Ast.CopyElements<StatementAst>(bodyScriptBlock.ScriptBlock.EndBlock.Statements), null);
+
+                    Expression childBlock = compiler.Compile(statementBody);
 
                     // Compile the keyword invocation itself, passing in the arguments and the child block
-                    Expression topInvocation = Expression.Call(KeywordProcessorCache.CachedInvokeScriptBlockKeyword, contextVariable, keywordCtor, scriptBlockArgsArray);
-                    ParameterExpression temp = Expression.Variable(typeof(object));
-                    Expression topInvokeAssign = Expression.Assign(temp, topInvocation);
+                    Expression topInvocation = Expression.Call(KeywordProcessorCache.CachedEnterScriptBlockKeywordScope, contextVariable, keywordCtor, scriptBlockArgsArray);
 
-                    invocationCall = Expression.Block(typeof(object), new[] { temp }, topInvokeAssign, childBlock, stackPop, temp);
+                    invocationCall = Expression.Block(typeof(void), topInvocation, childBlock);
                     break;
 
                 default:
@@ -177,7 +180,71 @@ namespace System.Management.Automation.Language
                 return Expression.Empty();
             }
 
-            return compiler.CallAddCurrentPipe(invocationCall);
+            // Compile the stack pop after the keyword and child invocations
+            Expression stackPop = Expression.Call(KeywordProcessorCache.CachedLeaveKeywordScope, contextVariable);
+
+            if (DynamicKeyword.ContainsKeyword(kwAst.Keyword.Keyword))
+            {
+                return compiler.CallAddCurrentPipe(Expression.Block(typeof(object), invocationCall, stackPop));
+            }
+
+            return Expression.Block(typeof(object), invocationCall, stackPop);
+        }
+    }
+
+    /// <summary>
+    /// Defines a runtime which tracks the state of a DynamicKeyword execution block
+    /// </summary>
+    public class DynamicKeywordRuntimeContext
+    {
+        private Stack<Tuple<Keyword, object>> _keywordScopeStack;
+        private Stack<List<object>> _keywordResultStack;
+
+        /// <summary>
+        /// Default constructor
+        /// </summary>
+        public DynamicKeywordRuntimeContext()
+        {
+            _keywordScopeStack = new Stack<Tuple<Keyword, object>>();
+            _keywordResultStack = new Stack<List<object>>();
+        }
+
+        /// <summary>
+        /// Enter the scope of a dynamic keyword invocation by running the scope entry call.
+        /// The expectation is that the compiler will put the calls of children's scope entries after this one
+        /// </summary>
+        /// <param name="keyword">the dynamic keyword to enter the scope of</param>
+        public object EnterScope(Keyword keyword)
+        {
+            object entryResult = null;
+            if (keyword.RuntimeEnterScopeCall != null)
+            {
+                entryResult = keyword.RuntimeEnterScopeCall(keyword, _keywordScopeStack);
+            }
+            _keywordResultStack.Push(new List<object>());
+            _keywordScopeStack.Push(new Tuple<Keyword, object>(keyword, entryResult));
+            return entryResult;
+        }
+
+        /// <summary>
+        /// Leave the scope of a runtime keyword, executing the scope exit call (which processes the results
+        /// of child keywords). It is expected the compiler will call this after EnterScope(keyword) for any given keyword.
+        /// </summary>
+        /// <returns>the result of the scope exit call of the keyword we are leaving the scope of</returns>
+        public object LeaveScope()
+        {
+            Keyword keyword = _keywordScopeStack.Pop().Item1;
+            List<object> childResults = _keywordResultStack.Pop();
+            object result = null;
+            if (keyword.RuntimeLeaveScopeCall != null)
+            {
+                result = keyword.RuntimeLeaveScopeCall(keyword, _keywordScopeStack, childResults);
+            }
+            if (_keywordResultStack.Count > 0)
+            {
+                _keywordResultStack.Peek().Add(result);
+            }
+            return result;
         }
     }
 
@@ -190,17 +257,17 @@ namespace System.Management.Automation.Language
 
         public static readonly MethodInfo CachedInvokeCommandKeyword;
         public static readonly MethodInfo CachedInvokeHashtableKeyword;
-        public static readonly MethodInfo CachedInvokeScriptBlockKeyword;
+        public static readonly MethodInfo CachedEnterScriptBlockKeywordScope;
 
-        public static readonly MethodInfo CachedPopStack;
+        public static readonly MethodInfo CachedLeaveKeywordScope;
 
         static KeywordProcessorCache()
         {
             CachedInvokeCommandKeyword = typeof(KeywordProcessorCache).GetMethod(nameof(InvokeCommandKeyword), staticFlags);
             CachedInvokeHashtableKeyword = typeof(KeywordProcessorCache).GetMethod(nameof(InvokeHashtableKeyword), staticFlags);
-            CachedInvokeScriptBlockKeyword = typeof(KeywordProcessorCache).GetMethod(nameof(InvokeScriptBlockKeyword), staticFlags);
+            CachedEnterScriptBlockKeywordScope = typeof(KeywordProcessorCache).GetMethod(nameof(EnterScriptBlockKeywordScope), staticFlags);
 
-            CachedPopStack = typeof(KeywordProcessorCache).GetMethod(nameof(PopKeywordStack), staticFlags);
+            CachedLeaveKeywordScope = typeof(KeywordProcessorCache).GetMethod(nameof(LeaveKeywordScope), staticFlags);
         }
 
         /// <summary>
@@ -214,7 +281,7 @@ namespace System.Management.Automation.Language
         private static object InvokeCommandKeyword(ExecutionContext context, Func<Keyword> keywordCtor, CommandParameterInternal[] parameters)
         {
             Keyword keyword = InstantiateKeyword(keywordCtor, parameters);
-            return keyword.RuntimeCall(keyword, context.EngineSessionState.CurrentScope.DynamicKeywordScope);
+            return context.EngineSessionState.CurrentScope.DynamicKeywordRuntime.EnterScope(keyword);
         }
 
         /// <summary>
@@ -229,8 +296,7 @@ namespace System.Management.Automation.Language
         {
             Keyword keyword = InstantiateKeyword(keywordCtor, parameters);
             AssignHashtableProperties(keyword, body);
-            context.EngineSessionState.CurrentScope.DynamicKeywordScope.Push(keyword);
-            return keyword.RuntimeCall(keyword, context.EngineSessionState.CurrentScope.DynamicKeywordScope);
+            return context.EngineSessionState.CurrentScope.DynamicKeywordRuntime.EnterScope(keyword);
         }
 
         /// <summary>
@@ -240,39 +306,19 @@ namespace System.Management.Automation.Language
         /// <param name="keywordCtor"></param>
         /// <param name="parameters"></param>
         /// <returns></returns>
-        private static object InvokeScriptBlockKeyword(ExecutionContext context, Func<Keyword> keywordCtor, CommandParameterInternal[] parameters)
+        private static object EnterScriptBlockKeywordScope(ExecutionContext context, Func<Keyword> keywordCtor, CommandParameterInternal[] parameters)
         {
             Keyword keyword = InstantiateKeyword(keywordCtor, parameters);
-            context.EngineSessionState.CurrentScope.DynamicKeywordScope.Push(keyword);
-            return keyword.RuntimeCall(keyword, context.EngineSessionState.CurrentScope.DynamicKeywordScope);
+            return context.EngineSessionState.CurrentScope.DynamicKeywordRuntime.EnterScope(keyword);
         }
 
         /// <summary>
         /// 
         /// </summary>
         /// <param name="context"></param>
-        private static void PopKeywordStack(ExecutionContext context)
+        private static object LeaveKeywordScope(ExecutionContext context)
         {
-            context.EngineSessionState.CurrentScope.DynamicKeywordScope.Pop();
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="context"></param>
-        /// <param name="result"></param>
-        private static void AddToKeywordResultList(ExecutionContext context, object result)
-        {
-            context.EngineSessionState.CurrentScope.DynamicKeywordResults.Add(result);
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="context"></param>
-        private static void ResetKeywordResultList(ExecutionContext context)
-        {
-            context.EngineSessionState.CurrentScope.DynamicKeywordResults.Clear();
+            return context.EngineSessionState.CurrentScope.DynamicKeywordRuntime.LeaveScope();
         }
 
         /// <summary>
@@ -998,7 +1044,8 @@ namespace System.Management.Automation.Language
             keyword.PreParse = keywordDefinition.PreParse;
             keyword.PostParse = keywordDefinition.PostParse;
             keyword.SemanticCheck = keywordDefinition.SemanticCheck;
-            keyword.RuntimeCall = keywordDefinition.RuntimeCall;
+            keyword.RuntimeEnterCall = keywordDefinition.RuntimeEnterScopeCall;
+            keyword.RuntimeLeaveCall = keywordDefinition.RuntimeLeaveScopeCall;
             keyword.CompilationStrategy = keywordDefinition.CompilationStrategy;
             keyword.ImplementingKeyword = keywordType;
         }
