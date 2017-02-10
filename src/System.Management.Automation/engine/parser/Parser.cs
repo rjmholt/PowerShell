@@ -3791,7 +3791,6 @@ namespace System.Management.Automation.Language
                         case TokenKind.Semi:
                         case TokenKind.AndAnd:
                         case TokenKind.OrOr:
-                        // TODO: These last three might need errors
                         case TokenKind.MinusMinus:
                         case TokenKind.Redirection:
                         case TokenKind.RedirectInStd:
