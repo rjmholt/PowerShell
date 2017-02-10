@@ -19,16 +19,12 @@ using System.Linq.Expressions;
 
 namespace System.Management.Automation.Language
 {
-    // TODO:
-    //   - Check ParseError errorId strings
-    //   - Check ParseError Extents
-
     /// <summary>
     /// Specifies the semantic properties/actions that a
     /// DSL keyword must provide to the PowerShell runtime. This must
     /// be subclassed to instantiate a new PowerShell keyword
     /// </summary>
-    public abstract class Keyword
+    public abstract class Keyword : System.Management.Automation.Internal.InternalCommand
     {
         /// <summary>
         /// Create a fresh empty instance of a keyword
@@ -38,10 +34,21 @@ namespace System.Management.Automation.Language
             PreParse = null;
             PostParse = null;
             SemanticCheck = null;
-            RuntimeEnterScopeCall = null;
-            RuntimeLeaveScopeCall = null;
             CompilationStrategy = DefaultCompilationStrategy;
         }
+
+        public KeywordInfo KeywordInfo
+        {
+            get
+            {
+                return (KeywordInfo)CommandInfo;
+            }
+            set
+            {
+                CommandInfo = value;
+            }
+        }
+
 
         /// <summary>
         /// Specifies the action to execute before the parser hits
@@ -71,23 +78,6 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// Specifies the call to be made at runtime when the keyword is first executed (before it's children)
-        /// </summary>
-        public Func<Keyword, IEnumerable<Tuple<Keyword, object>>, object> RuntimeEnterScopeCall
-        {
-            get; set;
-        }
-
-        /// <summary>
-        /// Specifies the call to be made at runtime by the keyword after its children have been executed
-        /// </summary>
-        public Func<Keyword, IEnumerable<Tuple<Keyword, object>>, List<object>, object> RuntimeLeaveScopeCall
-        {
-            get; set;
-        }
-
-
-        /// <summary>
         /// Allows the specification of a new compilation algorithm, allowing the definition of
         /// arbitrary DynamicKeywordStatementAst semantics
         /// </summary>
@@ -96,16 +86,38 @@ namespace System.Management.Automation.Language
             get; set;
         }
 
+        /// <summary>
+        /// Specifies the call to be made at runtime when the keyword is first executed (before it's children)
+        /// </summary>
+        public virtual object RuntimeEnterScope(IEnumerable<Tuple<Keyword, object>> parentKeywordSetups)
+        {
+            throw new NotImplementedException();
+        }
+
+        /// <summary>
+        /// Specifies the call to be made at runtime by the keyword after its children have been executed
+        /// </summary>
+        public virtual object RuntimeLeaveScope(IEnumerable<Tuple<Keyword, object>> parentKeywordSetups, List<object> childResults)
+        {
+            throw new NotImplementedException();
+        }
+
         private static Expression DefaultCompilationStrategy(Compiler compiler, ParameterExpression contextVariable, DynamicKeywordStatementAst kwAst)
         {
+            var dllKeyword = kwAst.Keyword as DllDefinedDynamicKeyword;
+            if (dllKeyword == null)
+            {
+                throw PSTraceSource.NewInvalidOperationException("Non-DLL-provided keyword '{0}' should not be compiled", kwAst.Keyword);
+            }
+
             // If there is no RuntimeCall, do nothing
-            if (kwAst.Keyword.RuntimeEnterCall == null && kwAst.Keyword.RuntimeLeaveCall == null)
+            if (!dllKeyword.KeywordInfo.HasEnterScopeCall && !dllKeyword.KeywordInfo.HasLeaveScopeCall)
             {
                 return Expression.Empty();
             }
 
             // Get the keyword constructor by getting the C# compiler to reinterpret the delegate from earlier
-            Expression<Func<Keyword>> keywordCtor = () => kwAst.Keyword.CachedKeywordConstructor();
+            Expression<Func<Keyword>> keywordCtor = dllKeyword.KeywordInfo.KeywordCtorExpression;
 
             Expression invocationCall = null;
             switch (kwAst.Keyword.BodyMode)
@@ -193,6 +205,193 @@ namespace System.Management.Automation.Language
     }
 
     /// <summary>
+    /// Info class representing the runtime type information for a Dynamic Keyword
+    /// </summary>
+    public class KeywordInfo : CommandInfo
+    {
+        internal KeywordInfo(DynamicKeyword keywordData, Type definingType, string definition)
+            : base(keywordData.Keyword, CommandTypes.DynamicKeyword)
+        {
+            if (!typeof(Keyword).IsAssignableFrom(definingType))
+            {
+                throw PSTraceSource.NewArgumentOutOfRangeException(nameof(definingType), definingType);
+            }
+
+            if (keywordData == null)
+            {
+                throw PSTraceSource.NewArgumentNullException(nameof(keywordData));
+            }
+
+            if (String.IsNullOrEmpty(definition))
+            {
+                throw PSTraceSource.NewArgumentNullException(nameof(definition));
+            }
+
+            DefiningType = definingType;
+            KeywordData = keywordData;
+            _definition = definition;
+        }
+
+        /// <summary>
+        /// Copy constructor
+        /// </summary>
+        /// <param name="other">the other instance of KeywordInfo</param>
+        internal KeywordInfo(KeywordInfo other) : this(other.KeywordData, other.DefiningType, other.Definition)
+        {
+            this._keywordCtorExpression = other._keywordCtorExpression;
+            this._keywordCtor = other._keywordCtor;
+        }
+
+        public override string Definition
+        {
+            get
+            {
+                return _definition;
+            }
+        }
+        private string _definition;
+
+        /// <summary>
+        /// The output type of a DynamicKeyword is just object. There may be a way to extract more information though
+        /// </summary>
+        public override ReadOnlyCollection<PSTypeName> OutputType
+        {
+            get
+            {
+                return new ReadOnlyCollection<PSTypeName>(new[] { new PSTypeName(typeof(object)) });
+            }
+        }
+
+        public bool IsNested { get; }
+
+        internal Keyword KeywordDefinitionInstance
+        {
+            get
+            {
+                return _keywordDefinitionInstance ??
+                    (_keywordDefinitionInstance = KeywordCtor());
+            }
+        }
+        private Keyword _keywordDefinitionInstance;
+
+        internal Func<Keyword> KeywordCtor
+        {
+            get
+            {
+                if (_keywordCtor != null)
+                {
+                    return _keywordCtor;
+                }
+                return (_keywordCtor = KeywordCtorExpression.Compile());
+            }
+        }
+        private Func<Keyword> _keywordCtor;
+
+        internal Expression<Func<Keyword>> KeywordCtorExpression
+        {
+            get
+            {
+                if (_keywordCtorExpression != null)
+                {
+                    return _keywordCtorExpression;
+                }
+
+                var ctorInfo = DefiningType.GetConstructor(new Type[0]);
+                return (_keywordCtorExpression = Expression.Lambda<Func<Keyword>>(Expression.New(ctorInfo)));
+            }
+        }
+        private Expression<Func<Keyword>> _keywordCtorExpression;
+
+        internal Type DefiningType { get; }
+
+        public DynamicKeyword KeywordData { get; }
+
+        /// <summary>
+        /// A custom function that gets executed on the DynamicKeyword definition at parsing time before parsing dynamickeyword block
+        /// </summary>
+        internal Func<DynamicKeyword, ParseError[]> PreParseCall
+        {
+            get
+            {
+                return KeywordDefinitionInstance.PreParse;
+            }
+        }
+
+        /// <summary>
+        /// A custom function that gets executed at parsing time after parsing dynamickeyword block
+        /// </summary>
+        internal Func<DynamicKeywordStatementAst, ParseError[]> PostParseCall
+        {
+            get
+            {
+                return KeywordDefinitionInstance.PostParse;
+            }
+        }
+
+        /// <summary>
+        /// A custom function that checks semantic for the given <see cref="DynamicKeywordStatementAst"/>
+        /// </summary>
+        internal Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheckCall
+        {
+            get
+            {
+                return KeywordDefinitionInstance.SemanticCheck;
+            }
+        }
+
+        /// <summary>
+        /// Function defining the algorithm for compiling the keyword
+        /// </summary>
+        internal Func<Compiler, ParameterExpression, DynamicKeywordStatementAst, Expression> CompilationStrategy
+        {
+            get
+            {
+                return KeywordDefinitionInstance.CompilationStrategy;
+            }
+        }
+
+        /// <summary>
+        /// Detect whether this object has overridden RuntimeEnterScope
+        /// </summary>
+        internal bool HasEnterScopeCall
+        {
+            get
+            {
+                if (_hasEnterScopeCall.HasValue)
+                {
+                    return _hasEnterScopeCall.Value;
+                }
+                MethodInfo enterScopeInfo = DefiningType.GetMethod(nameof(Keyword.RuntimeEnterScope), new [] { typeof(IEnumerable<Tuple<Keyword, object>>), typeof(object) });
+                bool isOverridden = enterScopeInfo.DeclaringType == DefiningType;
+                isOverridden &= enterScopeInfo.GetBaseDefinition().DeclaringType == typeof(Keyword);
+                _hasEnterScopeCall = isOverridden;
+                return _hasEnterScopeCall.Value;
+            }
+        }
+        private bool? _hasEnterScopeCall;
+
+        /// <summary>
+        /// Detect whether this object has overridden RuntimeLeaveScope
+        /// </summary>
+        internal bool HasLeaveScopeCall
+        {
+            get
+            {
+                if (_hasLeaveScopeCall.HasValue)
+                {
+                    return _hasLeaveScopeCall.Value;
+                }
+                MethodInfo leaveScopeInfo = DefiningType.GetMethod(nameof(Keyword.RuntimeLeaveScope), new [] { typeof(IEnumerable<Tuple<Keyword, object>>), typeof(List<object>), typeof(object) });
+                bool isOverridden = leaveScopeInfo.DeclaringType == DefiningType;
+                isOverridden &= leaveScopeInfo.GetBaseDefinition().DeclaringType == typeof(Keyword);
+                _hasLeaveScopeCall = isOverridden;
+                return _hasLeaveScopeCall.Value;
+            }
+        }
+        private bool? _hasLeaveScopeCall;
+    }
+
+    /// <summary>
     /// Defines a runtime which tracks the state of a DynamicKeyword execution block
     /// </summary>
     public class DynamicKeywordRuntimeContext
@@ -217,9 +416,9 @@ namespace System.Management.Automation.Language
         public object EnterScope(Keyword keyword)
         {
             object entryResult = null;
-            if (keyword.RuntimeEnterScopeCall != null)
+            if (keyword.KeywordInfo.HasEnterScopeCall)
             {
-                entryResult = keyword.RuntimeEnterScopeCall(keyword, _keywordScopeStack);
+                entryResult = keyword.RuntimeEnterScope(_keywordScopeStack);
             }
             _keywordResultStack.Push(new List<object>());
             _keywordScopeStack.Push(new Tuple<Keyword, object>(keyword, entryResult));
@@ -236,9 +435,9 @@ namespace System.Management.Automation.Language
             Keyword keyword = _keywordScopeStack.Pop().Item1;
             List<object> childResults = _keywordResultStack.Pop();
             object result = null;
-            if (keyword.RuntimeLeaveScopeCall != null)
+            if (keyword.KeywordInfo.HasLeaveScopeCall)
             {
-                result = keyword.RuntimeLeaveScopeCall(keyword, _keywordScopeStack, childResults);
+                result = keyword.RuntimeLeaveScope(_keywordScopeStack, childResults);
             }
             if (_keywordResultStack.Count > 0)
             {
@@ -622,12 +821,13 @@ namespace System.Management.Automation.Language
         /// spits out an array of the top level keywords defined in it
         /// </summary>
         /// <returns>an array of the top level DynamicKeywords defined in the module</returns>
-        public IDictionary<string, DynamicKeyword> ReadDslSpecification()
+        public IDictionary<string, DllDefinedDynamicKeyword> ReadDslSpecification()
         {
             // TODO: Ensure the module is a DLL, else return null
 
-            IDictionary<string, DynamicKeyword> globalKeywords;
+            IDictionary<string, DllDefinedDynamicKeyword> globalKeywords;
 
+            // Read the file metadata to load the parse-time keyword information
             using (FileStream stream = File.OpenRead(_moduleInfo.Path))
             using (var peReader = new PEReader(stream))
             {
@@ -642,17 +842,16 @@ namespace System.Management.Automation.Language
                 globalKeywords =  ReadGlobalDynamicKeywords();
             }
 
-            // TODO: Move this somewhere later in the interpreter
-            // TODO: Find out if reusing a readonly FileStream is acceptable/feasibly
-            using (FileStream stream = File.OpenRead(_moduleInfo.Path))
-            {
-                Assembly dslDefinitionAsm = ClrFacade.LoadFrom(stream);
-                ReadGlobalKeywordFunctions(globalKeywords, dslDefinitionAsm);
-            }
+            // TODO: Move this elsewhere later
+            // Load in the keyword type information
+            (new DynamicKeywordLoader(globalKeywords.Values)).Load();
 
             return globalKeywords;
         }
 
+        /// <summary>
+        /// Provides a reader to render CIL type metadata into Type objects, provided those types are already loaded
+        /// </summary>
         private TypingTypeProvider TypeLookupProvider
         {
             get
@@ -663,6 +862,9 @@ namespace System.Management.Automation.Language
         }
         private static TypingTypeProvider s_typeLookupProvider;
 
+        /// <summary>
+        /// Provides a reader to render CIL type metadata as strings
+        /// </summary>
         private TypeNameTypeProvider TypeNameProvider
         {
             get
@@ -679,9 +881,9 @@ namespace System.Management.Automation.Language
         /// by recursive descent.
         /// </summary>
         /// <returns>an array of the top level keywords defined in the DLL</returns>
-        private IDictionary<string, DynamicKeyword> ReadGlobalDynamicKeywords()
+        private IDictionary<string, DllDefinedDynamicKeyword> ReadGlobalDynamicKeywords()
         {
-            var globalKeywords = new Dictionary<string, DynamicKeyword>();
+            var globalKeywords = new Dictionary<string, DllDefinedDynamicKeyword>();
 
             // Read in any defined enums to helpfully resolve types for parameters
             _enumDefStack.Push(ReadEnumDefinitions(_metadataReader.TypeDefinitions));
@@ -694,7 +896,7 @@ namespace System.Management.Automation.Language
                 var declaringType = typeDef.GetDeclaringType();
                 if (declaringType.IsNil && IsKeywordSpecification(typeDef))
                 {
-                    DynamicKeyword keyword = ReadKeywordSpecification(typeDef);
+                    DllDefinedDynamicKeyword keyword = ReadKeywordSpecification(typeDef);
                     if (keyword.UseMode != DynamicKeywordUseMode.OptionalMany)
                     {
                         // TODO: Make this error user-consumable
@@ -750,7 +952,7 @@ namespace System.Management.Automation.Language
         /// </summary>
         /// <param name="typeDef">the type definition object for the keyword class to be parsed</param>
         /// <returns>the constructed DynamicKeyword from the parsed specification</returns>
-        private DynamicKeyword ReadKeywordSpecification(TypeDefinition typeDef)
+        private DllDefinedDynamicKeyword ReadKeywordSpecification(TypeDefinition typeDef)
         {
             // Register the keyword name
             string keywordName = _metadataReader.GetString(typeDef.Name);
@@ -816,7 +1018,7 @@ namespace System.Management.Automation.Language
 
             // Read in all nested keywords below this one
             _keywordDefinitionStack.Push(new HashSet<string>());
-            List<DynamicKeyword> innerKeywords = new List<DynamicKeyword>();
+            List<DllDefinedDynamicKeyword> innerKeywords = new List<DllDefinedDynamicKeyword>();
             foreach (var innerTypeHandle in typeDef.GetNestedTypes())
             {
                 var innerTypeDef = _metadataReader.GetTypeDefinition(innerTypeHandle);
@@ -827,37 +1029,16 @@ namespace System.Management.Automation.Language
                         // TODO: Make this more user-consumable
                         throw PSTraceSource.NewNotSupportedException("Cannot define keywords underneath a command-body keyword");
                     }
-                    DynamicKeyword innerKeyword = ReadKeywordSpecification(innerTypeDef);
+                    DllDefinedDynamicKeyword innerKeyword = ReadKeywordSpecification(innerTypeDef);
                     innerKeyword.IsNested = true;
                     innerKeywords.Add(innerKeyword);
                 }
             }
+
             _keywordDefinitionStack.Pop();
-
-            // Set all the properties for the keyword itself
-            var keyword = new DynamicKeyword()
-            {
-                ImplementingModule = _moduleInfo.Name,
-                Keyword = keywordName,
-                BodyMode = bodyMode,
-                UseMode = useMode,
-            };
-            foreach (var keywordParameter in keywordParameters)
-            {
-                keyword.Parameters.Add(keywordParameter.Name, keywordParameter);
-            }
-            foreach (var keywordProperty in keywordProperties)
-            {
-                keyword.Properties.Add(keywordProperty.Name, keywordProperty);
-            }
-            foreach (var innerKeyword in innerKeywords)
-            {
-                keyword.InnerKeywords.Add(innerKeyword.Keyword, innerKeyword);
-            }
-
             _enumDefStack.Pop();
 
-            return keyword;
+            return new DllDefinedDynamicKeyword(keywordName, innerKeywords, keywordParameters, keywordProperties, bodyMode, useMode, _moduleInfo);
         }
 
         private bool IsKeywordParameterAttribute(CustomAttribute keywordParameterAttribute)
@@ -1043,58 +1224,6 @@ namespace System.Management.Automation.Language
                         break;
                 }
             }
-        }
-
-        /// <summary>
-        /// Read in semantic calls on globally scoped keywords
-        /// </summary>
-        /// <param name="globalKeywords">the global keywords to add functions to</param>
-        /// <param name="definingAssembly">the assembly that defines the keyword specifications</param>
-        private void ReadGlobalKeywordFunctions(IDictionary<string, DynamicKeyword> globalKeywords, Assembly definingAssembly)
-        {
-            foreach (var typeDef in definingAssembly.DefinedTypes)
-            {
-                if (globalKeywords.ContainsKey(typeDef.Name))
-                {
-                    ReadKeywordFunctions(globalKeywords[typeDef.Name], typeDef);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Read in the semantic calls on a Keyword specification to attach to a DynamicKeyword
-        /// </summary>
-        /// <param name="keyword">the DynamicKeyword to add runtime calls to</param>
-        /// <param name="typeDefintion">the info class of the Keyword specification to load from</param>
-        private void ReadKeywordFunctions(DynamicKeyword keyword, TypeInfo typeDefintion)
-        {
-            foreach (var innerKeyword in keyword.InnerKeywords.Values)
-            {
-                TypeInfo nestedType = typeDefintion.GetDeclaredNestedType(innerKeyword.Keyword);
-                if (nestedType != null)
-                {
-                    ReadKeywordFunctions(innerKeyword, nestedType);
-                }
-                else
-                {
-                    // TODO: Throw something about expecting a type that was not found
-                    PSTraceSource.NewArgumentException("Expected to find keyword definition '{0}'. Has the defining module been modified?", innerKeyword.Keyword);
-                }
-            }
-
-            // TODO: These are redundant -- the keyword should be constructed later, so parameters can be set and the keyword executed
-
-            Type keywordType = typeDefintion.AsType();
-
-            keyword.CachedKeywordConstructor = () => (Keyword) Activator.CreateInstance(keywordType);
-            Keyword keywordDefinition = keyword.CachedKeywordConstructor();
-            keyword.PreParse = keywordDefinition.PreParse;
-            keyword.PostParse = keywordDefinition.PostParse;
-            keyword.SemanticCheck = keywordDefinition.SemanticCheck;
-            keyword.RuntimeEnterCall = keywordDefinition.RuntimeEnterScopeCall;
-            keyword.RuntimeLeaveCall = keywordDefinition.RuntimeLeaveScopeCall;
-            keyword.CompilationStrategy = keywordDefinition.CompilationStrategy;
-            keyword.ImplementingKeyword = keywordType;
         }
 
         private interface IGenericContext<TType>
@@ -1612,4 +1741,154 @@ namespace System.Management.Automation.Language
         }
     }
     #endregion /* DSL Metadata Reading */
+
+    #region Keyword Reflection Type Loading
+
+    /// <summary>
+    /// Takes the information stored in DynamicKeyword objects and loads the
+    /// type information in accordingly
+    /// </summary>
+    internal class DynamicKeywordLoader
+    {
+
+        private static void AssignKeywordInfo(DllDefinedDynamicKeyword keywordData, KeywordInfo keywordInfo)
+        {
+            keywordData.KeywordInfo = keywordInfo;
+        }
+
+        private readonly ImmutableDictionary<DllDefinedDynamicKeyword, Assembly> _keywordAssemblies;
+        private readonly ImmutableList<DllDefinedDynamicKeyword> _topLevelKeywordsToLoad;
+
+        public DynamicKeywordLoader(IEnumerable<DllDefinedDynamicKeyword> keywordsToLoad)
+        {
+            _topLevelKeywordsToLoad = keywordsToLoad.ToImmutableList();
+        }
+        
+        /// <summary>
+        /// Perform the keyword loading operation
+        /// </summary>
+        public void Load()
+        {
+            LoadModules();
+            LoadKeywords();
+        }
+
+        /// <summary>
+        /// Load the assemblies for the keywords to load
+        /// </summary>
+        private void LoadModules()
+        {
+            var loadedModules = new Dictionary<PSModuleInfo, Assembly>();
+            var keywordAssemblies = new Dictionary<DllDefinedDynamicKeyword, Assembly>();
+            foreach (var keyword in _topLevelKeywordsToLoad)
+            {
+                if (loadedModules.ContainsKey(keyword.ImplementingModuleInfo))
+                {
+                    keywordAssemblies[keyword] = loadedModules[keyword.ImplementingModuleInfo];
+                    continue;
+                }
+
+                loadedModules[keyword.ImplementingModuleInfo] = ClrFacade.LoadFrom(keyword.ImplementingModuleInfo.Path);
+            }
+        }
+
+        /// <summary>
+        /// Load the keyword runtime logic in. This must be performed after executing LoadModules()
+        /// </summary>
+        private void LoadKeywords()
+        {
+            var keywordDefinitions = new List<DictionaryTree<DllDefinedDynamicKeyword, KeywordInfo>>();
+            foreach(var keyword in _topLevelKeywordsToLoad)
+            {
+                Type definingType = _keywordAssemblies[keyword].GetType(keyword.Keyword);
+                if (definingType == null)
+                {
+                    throw PSTraceSource.NewInvalidOperationException("Keyword '{0}' not defined in assembly loaded from '{1}", keyword, keyword.ImplementingModuleInfo.Path);
+                }
+                keywordDefinitions.Add(ReadKeywordInfo(keyword, definingType.GetTypeInfo()));
+            }
+
+            foreach (var keywordDefinition in keywordDefinitions)
+            {
+                keywordDefinition.Process(AssignKeywordInfo);
+            }
+        }
+
+        /// <summary>
+        /// Read the information on a single keyword (and its children, recursively). This returns an immutable data structure
+        /// for later loading, so that errors will not lead to partial addition of runtime data
+        /// </summary>
+        /// <param name="keyword">the data holder for the dynamic keyword to load</param>
+        /// <param name="definingType">the loaded type representing the dynamic keyword</param>
+        /// <returns></returns>
+        private DictionaryTree<DllDefinedDynamicKeyword, KeywordInfo> ReadKeywordInfo(DllDefinedDynamicKeyword keyword, Type definingType)
+        {
+            var children = new List<DictionaryTree<DllDefinedDynamicKeyword, KeywordInfo>>();
+            foreach (var innerKeyword in keyword.InnerKeywords.Values)
+            {
+                Type nestedType = definingType.GetNestedType(innerKeyword.Keyword);
+                if (nestedType == null)
+                {
+                    throw PSTraceSource.NewInvalidOperationException("Inner keyword '{0}' is not defined within the type '{1}'", innerKeyword, definingType);
+                }
+                children.Add(ReadKeywordInfo((DllDefinedDynamicKeyword)innerKeyword, nestedType));
+            }
+            // TODO: Define what the definition string is for a given keyword
+            KeywordInfo keywordInfo = new KeywordInfo(keyword, definingType, "<TODO>");
+
+            return new DictionaryNode<DllDefinedDynamicKeyword, KeywordInfo>(keyword, keywordInfo, children);
+        }
+
+        private interface DictionaryTree<K, V>
+        {
+            void Process(Action<K, V> p);
+        }
+
+        private class DictionaryNode<K, V> : DictionaryTree<K, V>
+        {
+            private ImmutableList<DictionaryTree<K, V>> _children;
+            private readonly K _key;
+            private readonly V _value;
+
+            public DictionaryNode(K key, V value, IEnumerable<DictionaryTree<K, V>> children)
+            {
+                _key = key;
+                _value = value;
+                var acc = new List<DictionaryTree<K, V>>();
+                foreach (var child in children)
+                {
+                    acc.Add(child);
+                }
+                _children = acc.ToImmutableList();
+            }
+
+            public void Process(Action<K, V> p)
+            {
+                foreach (var child in _children)
+                {
+                    child.Process(p);
+                }
+                p(_key, _value);
+            }
+        }
+
+        private class DictionaryLeaf<K, V> : DictionaryTree<K, V>
+        {
+            public DictionaryLeaf(K key, V value)
+            {
+                _key = key;
+                _value = value;
+            }
+
+            private readonly K _key;
+            private readonly V _value;
+
+            public void Process(Action<K, V> p)
+            {
+                p(_key, _value);
+            }
+        }
+    }
+
+    #endregion /* Keyword Reflection Type Loading */
 }

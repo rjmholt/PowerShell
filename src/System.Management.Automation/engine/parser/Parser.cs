@@ -3473,7 +3473,7 @@ namespace System.Management.Automation.Language
             else
             {
                 StatementAst astResult;
-                if (isFunctionDefined)
+                if (keywordData.KeywordInfo.DefiningType != null)
                 {
                     astResult = FunctionDefinedDynamicKeywordStatementRule(functionName, keywordData);
                 }

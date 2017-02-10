@@ -2956,9 +2956,10 @@ namespace System.Management.Automation.Language
                 return Expression.Empty();
             }
 
-            if (dynamicKeywordAst.Keyword.CompilationStrategy != null)
+            var dllKeyword = dynamicKeywordAst.Keyword as DllDefinedDynamicKeyword;
+            if (dllKeyword?.KeywordInfo.CompilationStrategy != null)
             {
-                return dynamicKeywordAst.Keyword.CompilationStrategy(this, _executionContextParameter, dynamicKeywordAst);
+                return dllKeyword.KeywordInfo.CompilationStrategy(this, _executionContextParameter, dynamicKeywordAst);
             }
 
             return this.VisitPipeline(dynamicKeywordAst.GenerateCommandCallPipelineAst());

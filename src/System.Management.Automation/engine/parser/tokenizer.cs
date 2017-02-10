@@ -582,14 +582,7 @@ namespace System.Management.Automation.Language
             MetaStatement = other.MetaStatement;
             IsReservedKeyword = other.IsReservedKeyword;
             HasReservedProperties = other.HasReservedProperties;
-            PreParse = other.PreParse;
-            PostParse = other.PostParse;
-            SemanticCheck = other.SemanticCheck;
-            RuntimeEnterCall = other.RuntimeEnterCall;
-            RuntimeLeaveCall = other.RuntimeLeaveCall;
-            CompilationStrategy = other.CompilationStrategy;
-            ImplementingKeyword = other.ImplementingKeyword;
-            CachedKeywordConstructor = other.CachedKeywordConstructor;
+            IsNested = other.IsNested;
             foreach (KeyValuePair<string, DynamicKeywordProperty> entry in other.Properties)
             {
                 Properties.Add(entry.Key, new DynamicKeywordProperty(entry.Value));
@@ -608,7 +601,7 @@ namespace System.Management.Automation.Language
         /// Duplicates the DynamicKeyword
         /// </summary>
         /// <returns>A copy of the DynamicKeyword</returns>
-        public virtual DynamicKeyword Copy()
+        public DynamicKeyword Copy()
         {
             return new DynamicKeyword(this);
         }
@@ -616,13 +609,12 @@ namespace System.Management.Automation.Language
         /// <summary>
         /// The name of the module that implements the function corresponding to this keyword.
         /// </summary>
-        public string ImplementingModule { get; set; }
+        public virtual string ImplementingModule { get; set; }
 
         /// <summary>
         /// The version of the module that implements the function corresponding to this keyword.
         /// </summary>
-        public Version ImplementingModuleVersion { get; set; }
-
+        public virtual Version ImplementingModuleVersion { get; set; }
         /// <summary>
         /// The keyword string
         /// If an alias qualifier exist, use alias
@@ -714,60 +706,161 @@ namespace System.Management.Automation.Language
         }
         private Dictionary<string, DynamicKeywordParameter> _parameters;
 
-        /// <summary>
-        /// A custom function that gets executed at parsing time before parsing dynamickeyword block
-        /// The delegate has one parameter: DynamicKeyword
-        /// </summary>
-        public Func<DynamicKeyword, ParseError[]> PreParse { get; set; }
+        public bool IsNested { get; set; }
 
         /// <summary>
-        /// A custom function that gets executed at parsing time after parsing dynamickeyword block
+        /// A user-supplied function to execute before a DynamicKeywordStatementAst invoking this keyword is parsed
         /// </summary>
-        public Func<DynamicKeywordStatementAst, ParseError[]> PostParse { get; set; }
+        public virtual Func<DynamicKeyword, ParseError[]> PreParse { get; set; }
 
         /// <summary>
-        /// A custom function that checks semantic for the given <see cref="DynamicKeywordStatementAst"/>
+        /// User-supplied function to execute as soon as a DynamicKeywordStatementAst invoking this keyword is parsed
         /// </summary>
-        public Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck { get; set; }
+        public virtual Func<DynamicKeywordStatementAst, ParseError[]> PostParse { get; set; }
 
         /// <summary>
-        /// A custom function that determines the behavior of the DynamicKeyword as its runtime scope is entered, if set.
-        /// This overrides the "ImplementingModule\KeywordName" function definition mechanism, if set.
+        /// User-supplied function to verify the semantics of a DynamicKeywordStatementAst invoking this keyword
         /// </summary>
-        public Func<Keyword, IEnumerable<Tuple<Keyword, object>>, object> RuntimeEnterCall { get; set; }
-
-        /// <summary>
-        /// A custom function that determines the behavior of the DynamicKeyword as its runtime scope is left, if set.
-        /// This overrides the "ImplementingModule\KeywordName" function definition when set.
-        /// <para>
-        /// The delegate types refer to:
-        ///   Keyword: the keyword instance (since we use a static delegate so a null check can check implementation, we need to give it the instance)
-        ///   IEnumerable&lt;Tuple&lt;Keyword, object&gt;&gt;: the stack of parent keywords
-        ///   List&lt;object&gt;: the results of child keywords, for this keyword to aggregate
-        ///   object: the keyword execution result
-        /// </para>
-        /// </summary>
-        public Func<Keyword, IEnumerable<Tuple<Keyword, object>>, List<object>, object> RuntimeLeaveCall { get; set; }
-
-        /// <summary>
-        /// Specifies the delegate to generate the compiler's LINQ Expression tree for this keyword. The vast
-        /// majority of keywords will use the default compilation strategy, but this exists to ensure dynamic keyword
-        /// semantics are fully configurable by implementers
-        /// </summary>
-        public Func<Compiler, ParameterExpression, DynamicKeywordStatementAst, Expression> CompilationStrategy { get; set; }
-
-        /// <summary>
-        /// A reference to the defined Keyword class that implements this dynamic keyword, if it was defined
-        /// with a compiled C# keyword specification module.
-        /// TODO: Refactor this and DynamicKeyword into a DynamicKeywordInfo object that specifies the metadata on a DynamicKeyword
-        /// </summary>
-        public Type ImplementingKeyword { get; set; }
-
-        internal Func<Keyword> CachedKeywordConstructor { get; set; }
-
-        internal bool IsNested { get; set; }
+        public virtual Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck { get; set; }
     }
 
+    public class DllDefinedDynamicKeyword : DynamicKeyword
+    {
+        public DllDefinedDynamicKeyword(string name,
+            IEnumerable<DynamicKeyword> innerKeywords,
+            IEnumerable<DynamicKeywordParameter> parameters,
+            IEnumerable<DynamicKeywordProperty> properties,
+            DynamicKeywordBodyMode bodyMode,
+            DynamicKeywordUseMode useMode,
+            PSModuleInfo implementingModuleInfo)
+        {
+            Keyword = name;
+            BodyMode = bodyMode;
+            UseMode = useMode;
+            ImplementingModuleInfo = implementingModuleInfo;
+
+            foreach (var innerKeyword in innerKeywords)
+            {
+                if (innerKeyword is DllDefinedDynamicKeyword)
+                {
+                    InnerKeywords[innerKeyword.Keyword] = new DllDefinedDynamicKeyword((DllDefinedDynamicKeyword)innerKeyword);
+                }
+                else
+                {
+                    InnerKeywords[innerKeyword.Keyword] = new DynamicKeyword(innerKeyword);
+                }
+            }
+            foreach (var parameter in parameters)
+            {
+                Parameters[parameter.Name] = new DynamicKeywordParameter(parameter);
+            }
+            foreach (var property in properties)
+            {
+                Properties[property.Name] = new DynamicKeywordProperty(property);
+            }
+
+            DirectCall = false;
+            MetaStatement = false;
+            IsReservedKeyword = false;
+            HasReservedProperties = false;
+        }
+
+        public DllDefinedDynamicKeyword(DllDefinedDynamicKeyword other) : base(other)
+        {
+            KeywordInfo = new KeywordInfo(other.KeywordInfo);
+            ImplementingModuleInfo = other.ImplementingModuleInfo;
+        }
+
+        /// <summary>
+        /// Contains information about keyword runtime functionality
+        /// </summary>
+        public KeywordInfo KeywordInfo { get; set; }
+
+        /// <summary>
+        /// Information about the module that implements this keyword
+        /// </summary>
+        public PSModuleInfo ImplementingModuleInfo { get; set; }
+
+        public override string ImplementingModule
+        {
+            get
+            {
+                return ImplementingModuleInfo.Name;
+            }
+
+            set
+            {
+                throw PSTraceSource.NewInvalidOperationException("Cannot set module name of DllDefinedDynamicKeyword -- value = {0}", value);
+            }
+        }
+
+        public override Version ImplementingModuleVersion
+        {
+            get
+            {
+                return ImplementingModuleInfo.Version;
+            }
+
+            set
+            {
+                throw PSTraceSource.NewInvalidOperationException("Cannot set module version of DllDefinedDynamicKeyword -- value = {0}", value);
+            }
+        }
+
+        public override Func<DynamicKeyword, ParseError[]> PreParse
+        {
+            get
+            {
+                if (KeywordInfo != null)
+                {
+                    return KeywordInfo.PreParseCall;
+                }
+
+                throw PSTraceSource.NewArgumentNullException(nameof(KeywordInfo));
+            }
+
+            set
+            {
+                throw PSTraceSource.NewInvalidOperationException("Cannot set PreParse action of DllDefinedDynamicKeyword");
+            }
+        }
+
+        public override Func<DynamicKeywordStatementAst, ParseError[]> PostParse
+        {
+            get
+            {
+                if (KeywordInfo != null)
+                {
+                    return KeywordInfo.PostParseCall;
+                }
+
+                throw PSTraceSource.NewArgumentNullException(nameof(KeywordInfo));
+            }
+
+            set
+            {
+                throw PSTraceSource.NewInvalidOperationException("Cannot set PostParse action of DllDefinedDynamicKeyword");
+            }
+        }
+
+        public override Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
+        {
+            get
+            {
+                if (KeywordInfo != null)
+                {
+                    return KeywordInfo.SemanticCheckCall;
+                }
+
+                throw PSTraceSource.NewArgumentNullException(nameof(KeywordInfo));
+            }
+
+            set
+            {
+                throw PSTraceSource.NewInvalidOperationException("Cannot set SemanticCheck action of DllDefinedDynamicKeyword");
+            }
+        }
+    }
 
     internal static class DynamicKeywordExtension
     {

@@ -83,6 +83,11 @@ namespace System.Management.Automation
         Configuration = 0x0100,
 
         /// <summary>
+        /// A user-defined keyword
+        /// </summary>
+        DynamicKeyword = 0x0200,
+
+        /// <summary>
         /// All possible command types.
         /// </summary>
         /// 
@@ -90,7 +95,7 @@ namespace System.Management.Automation
         /// Note, a CommandInfo instance will never specify
         /// All as its CommandType but All can be used when filtering the CommandTypes.
         /// </remarks>
-        All = Alias | Function | Filter | Cmdlet | Script | ExternalScript | Application | Workflow | Configuration,
+        All = Alias | Function | Filter | Cmdlet | Script | ExternalScript | Application | Workflow | Configuration | DynamicKeyword,
     }
 
     /// <summary>
