@@ -347,55 +347,94 @@ namespace System.Management.Automation.Language
                 .Where(p => p.GetCustomAttribute<KeywordParameterAttribute>() != null)
                 .ToImmutableDictionary(p => p.Name, p => p);
 
+            ImmutableDictionary<int, PropertyInfo> positionalParameters = keywordParameters.Values
+                .Where(p => p.GetCustomAttribute<KeywordParameterAttribute>().Position != -1)
+                .ToImmutableDictionary(p => p.GetCustomAttribute<KeywordParameterAttribute>().Position, p => p);
+
+            bool expectingArgument = false;
+            string parameterName = null;
+            object parameterValue = null;
+            int position = 0;
+            var seenPositions = new HashSet<int>();
             for (int i = 0; i < parameters.Length; i++)
             {
-                CommandParameterInternal currParam = parameters[i];
-                string parameterName;
-                object parameterValue;
-
-                if (currParam.ParameterAndArgumentSpecified)
+                if (seenPositions.Contains(position))
                 {
-                    parameterName = currParam.ParameterName;
-                    parameterValue = currParam.ArgumentValue;
+                    position++;
                 }
-                else
+
+                CommandParameterInternal currParam = parameters[i];
+
+                // Deal with argument from last pass
+                if (expectingArgument)
                 {
-                    // Look ahead for the parameter argument we expect
-                    i++;
-                    if (currParam.ParameterNameSpecified && i < parameters.Length)
+                    expectingArgument = false;
+                    if (currParam.ParameterNameSpecified)
+                    {
+                        throw new RuntimeException("Parameter given when argument expected: " + currParam.ParameterText);
+                    }
+
+                    if (currParam.ArgumentSpecified)
+                    {
+                        parameterValue = currParam.ArgumentValue;
+                    }
+                }
+
+                if (currParam.ParameterNameSpecified)
+                {
+                    PropertyInfo parameter;
+                    if (currParam.ArgumentSpecified)
                     {
                         parameterName = currParam.ParameterName;
-                        currParam = parameters[i];
-                        if (currParam.ArgumentSpecified)
-                        {
-                            if (currParam.ParameterNameSpecified)
-                            {
-                                throw new RuntimeException("Parameter given when argument expected: " + currParam.ParameterText);
-                            }
+                        parameterValue = currParam.ArgumentValue;
 
-                            parameterValue = currParam.ArgumentValue;
-                        }
-                        else
+                        if (keywordParameters.ContainsKey(parameterName))
                         {
-                            throw new RuntimeException("Bad argument value :" + currParam.ParameterText);
+                            // Treat named parameters as if they had been specified in the correct position
+                            int pos = keywordParameters[parameterName].GetCustomAttribute<KeywordParameterAttribute>().Position;
+                            if (pos != -1)
+                            {
+                                seenPositions.Add(pos);
+                            }
                         }
                     }
-                    else if (!currParam.ParameterNameSpecified)
+                    // Test for switch parameters
+                    else if (keywordParameters.TryGetValue(currParam.ParameterName, out parameter) && parameter.PropertyType == typeof(SwitchParameter))
                     {
-                        throw new RuntimeException("Bad unnamed parameter: " + currParam.ParameterText);
+                        parameterName = currParam.ParameterName;
+                        parameterValue = SwitchParameter.Present;
                     }
                     else
                     {
-                        throw new RuntimeException("Bad parameter with no argument: " + currParam.ParameterText);
+                        expectingArgument = true;
+                        continue;
                     }
                 }
+                // Try to parse as a positional parameter
+                else if (currParam.ArgumentSpecified)
+                {
+                    PropertyInfo parameter;
+                    if (positionalParameters.TryGetValue(position, out parameter))
+                    {
+                        parameterName = parameter.Name;
+                        parameterValue = currParam.ArgumentValue;
+                        seenPositions.Add(position);
+                    }
+                    else
+                    {
+                        throw new RuntimeException("Bad unnamed parameter: " + currParam.ParameterText);
+                    }
+                }
+                // The parameter name and value is now resolved
 
+                // Ensure the parameter exists on the keyword
                 if (!keywordParameters.ContainsKey(parameterName))
                 {
                     var msg = String.Format("Unknown parameter: '-{0}: {1}'", parameterName, parameterValue);
                     throw new RuntimeException(msg);
                 }
 
+                // Ensure the type is correct
                 PropertyInfo parameterInfo = keywordParameters[parameterName];
                 if (!parameterInfo.PropertyType.IsAssignableFrom(parameterValue.GetType()))
                 {

@@ -3788,8 +3788,6 @@ namespace System.Management.Automation.Language
                         case TokenKind.Pipe:
                         case TokenKind.RCurly:
                         case TokenKind.RParen:
-                        case TokenKind.EndOfInput:
-                        case TokenKind.NewLine:
                         case TokenKind.Semi:
                         case TokenKind.AndAnd:
                         case TokenKind.OrOr:
@@ -3799,6 +3797,15 @@ namespace System.Management.Automation.Language
                         case TokenKind.RedirectInStd:
                             UngetToken(lookaheadToken);
                             scanning = false;
+                            continue;
+
+                        case TokenKind.EndOfInput:
+                            ReportIncompleteInput(After(lookaheadToken), () => ParserStrings.MissingStatementAfterKeyword, keywordData.Keyword);
+                            return null;
+
+                        case TokenKind.NewLine:
+                            SkipNewlines();
+                            lookaheadToken = NextToken();
                             continue;
 
                         case TokenKind.Ampersand:
@@ -3916,6 +3923,10 @@ namespace System.Management.Automation.Language
             }
 
             ExpressionAst body = DynamicKeywordBodyRule(lCurly, functionName, keywordData, isFunctionDefined: false);
+            if (body == null)
+            {
+                return null;
+            }
 
             //
             // Create DynamicKeywordStatementAst
