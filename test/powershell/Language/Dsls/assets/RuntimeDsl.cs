@@ -99,3 +99,26 @@ public class CustomTypeKeyword : Keyword
     [KeywordParameter()]
     public string DataString { get; set; }
 }
+
+[Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
+public class NestedParamKeyword : Keyword
+{
+    [Keyword()]
+    public class InnerParamKeyword : Keyword
+    {
+        [KeywordParameter()]
+        public InnerType Param { get; set; }
+
+        [KeywordParameter()]
+        public string OtherParam { get; set; }
+    }
+
+    public enum InnerType
+    {
+        ValueOne,
+        ValueTwo
+    }
+
+    [KeywordParameter()]
+    public object OuterParam { get; set; }
+}

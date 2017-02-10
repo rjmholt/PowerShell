@@ -1006,10 +1006,30 @@ namespace System.Management.Automation
                 {
                     commandAst = lastAst as CommandAst;
                 }
+
+                // Check for DynamicKeyword completions
+                if (commandAst == null && paramAst != null)
+                {
+                    DynamicKeywordStatementAst keywordAst = CompletionAnalysis.GetLastDynamicKeywordParentAst(lastAst);
+                    if (keywordAst != null)
+                    {
+                        DynamicKeyword keyword = keywordAst.Keyword;
+                        if (keyword.Parameters.ContainsKey(paramAst.ParameterName))
+                        {
+                            var results = new List<CompletionResult>();
+                            foreach (var value in keyword.Parameters[paramAst.ParameterName].Values)
+                            {
+                                results.Add(new CompletionResult(value, value, CompletionResultType.ParameterValue, " "));
+                            }
+                            return results;
+                        }
+                    }
+                }
             }
 
             if (commandAst == null)
             {
+
                 // We don't know if this could be expanded into anything interesting
                 return result;
             }

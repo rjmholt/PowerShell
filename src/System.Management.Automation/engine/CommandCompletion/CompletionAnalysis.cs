@@ -146,6 +146,37 @@ namespace System.Management.Automation
             return asts.LastOrDefault();
         }
 
+        public static DynamicKeywordStatementAst GetLastDynamicKeywordParentAst(Ast lastAst)
+        {
+            if (lastAst == null)
+            {
+                throw PSTraceSource.NewArgumentNullException(nameof(lastAst));
+            }
+
+            // Search for the containing DynamicKeyword Ast to get a scoped DynamicKeyword
+            Ast nextAst = lastAst;
+            while (nextAst.Parent != null && !(nextAst is DynamicKeywordStatementAst))
+            {
+                nextAst = nextAst.Parent;
+            }
+
+            return nextAst as DynamicKeywordStatementAst;
+        }
+
+        public DynamicKeyword GetLastDynamicKeyword(Ast lastAst, Token keywordToken)
+        {
+            // Try and resolve the last keyword invoked
+            DynamicKeywordStatementAst keywordAst = GetLastDynamicKeywordParentAst(lastAst);
+            if (keywordAst != null)
+            {
+                return keywordAst.Keyword;
+            }
+
+            // Otherwise, we can't resolve an AST, so need to go looking in the global namespace
+            return DynamicKeyword.GetKeyword(keywordToken.Text);
+        }
+
+
         #region Special Cases
 
         /// <summary>
@@ -688,6 +719,28 @@ namespace System.Management.Automation
                                         bool unused;
                                         result = GetResultForEnumPropertyValueOfDSCResource(completionContext, string.Empty,
                                             ref replacementIndex, ref replacementLength, out unused);
+                                    }
+                                    break;
+                                case TokenKind.LCurly:
+                                    DynamicKeywordStatementAst keywordParentAst = GetLastDynamicKeywordParentAst(lastAst);
+                                    if (keywordParentAst != null)
+                                    {
+                                        var keywordResults = new List<CompletionResult>();
+                                        foreach (var keyword in keywordParentAst.Keyword.InnerKeywords.Keys)
+                                        {
+                                            keywordResults.Add(new CompletionResult(keyword, keyword, CompletionResultType.DynamicKeyword, " "));
+                                        }
+                                        result = keywordResults;
+                                    }
+                                    break;
+                                // Handle DynamicKeywords (not Configurations) where parameters are available
+                                case TokenKind.DynamicKeyword:
+                                case TokenKind.Identifier:
+                                case TokenKind.Parameter:
+                                    List<CompletionResult> possibleResult = GetResultForDynamicKeywordParameters(lastAst, tokenBeforeCursor);
+                                    if (possibleResult != null)
+                                    {
+                                        result = possibleResult;
                                     }
                                     break;
                                 default:
@@ -1769,5 +1822,19 @@ namespace System.Management.Automation
 
             return result;
         }
+
+        private List<CompletionResult> GetResultForDynamicKeywordParameters(Ast lastAst, Token keywordToken)
+        {
+            DynamicKeyword keyword = GetLastDynamicKeyword(lastAst, keywordToken);
+
+            var results = new List<CompletionResult>();
+            foreach (DynamicKeywordParameter parameter in keyword.Parameters.Values)
+            {
+                results.Add(new CompletionResult("-" + parameter.Name, parameter.Name, CompletionResultType.ParameterName, " "));
+            }
+
+            return results;
+        }
+
     }
 }

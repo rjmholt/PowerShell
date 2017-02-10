@@ -164,7 +164,7 @@ namespace System.Management.Automation
         /// Initializes a new instance of the CompletionResult class
         /// </summary>
         /// <param name="completionText">the text to be used as the auto completion result</param>
-        /// <param name="listItemText">he text to be displayed in a list</param>
+        /// <param name="listItemText">the text to be displayed in a list</param>
         /// <param name="resultType">the type of completion result</param>
         /// <param name="toolTip">the text for the tooltip with details to be displayed about the object</param>
         public CompletionResult(string completionText, string listItemText, CompletionResultType resultType, string toolTip)
