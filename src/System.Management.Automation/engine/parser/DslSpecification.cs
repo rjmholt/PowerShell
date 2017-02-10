@@ -708,7 +708,8 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// Read in any enum definitions at the current type definition level
+        /// Read in any enum definitions at the current type definition level -- this will provide completion at
+        /// parse time without having to load the assembly
         /// </summary>
         /// <param name="typeDefinitions"></param>
         /// <returns></returns>
@@ -789,13 +790,20 @@ namespace System.Management.Automation.Language
             var keywordProperties = new List<DynamicKeywordProperty>();
             foreach (var propertyHandle in typeDef.GetProperties())
             {
+                var parameterPositions = new HashSet<int>();
                 var property = _metadataReader.GetPropertyDefinition(propertyHandle);
                 foreach (var attributeHandle in property.GetCustomAttributes())
                 {
                     var keywordMemberAttribute = _metadataReader.GetCustomAttribute(attributeHandle);
                     if (IsKeywordParameterAttribute(keywordMemberAttribute))
                     {
-                        keywordParameters.Add(ReadParameterSpecification(genericContext, property, keywordMemberAttribute));
+                        DynamicKeywordParameter param = ReadParameterSpecification(genericContext, property, keywordMemberAttribute);
+                        if (parameterPositions.Contains(param.Position))
+                        {
+                            throw PSTraceSource.NewInvalidOperationException("Cannot give two parameters the same position");
+                        }
+                        parameterPositions.Add(param.Position);
+                        keywordParameters.Add(param);
                         break;
                     }
                     else if (IsKeywordPropertyAttribute(keywordMemberAttribute))
