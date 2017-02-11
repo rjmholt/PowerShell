@@ -34,15 +34,10 @@ public class TypeExtension : Keyword
         var errors = new ConcurrentBag<string>();
 
         PropertyInfo contextProperty = typeof(TypeExtension).GetProperty("Context", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-        Console.WriteLine("contextProperty");
         object context = contextProperty.GetValue(this, BindingFlags.NonPublic, null, null, null);
-        Console.WriteLine("context");
         PropertyInfo typeTableProperty = context.GetType().GetProperty("TypeTable", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-        Console.WriteLine("typeTableProperty");
         object typeTable = typeTableProperty.GetValue(context, BindingFlags.NonPublic, null, null, null);
-        Console.WriteLine("typeTable");
         MethodInfo processType = typeTable.GetType().GetMethod("ProcessTypeDataToAdd", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
-        Console.WriteLine("processType");
 
         processType.Invoke(typeTable, new object[] { errors, _typeData });
 
