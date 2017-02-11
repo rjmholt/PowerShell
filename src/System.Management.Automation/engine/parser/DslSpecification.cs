@@ -37,13 +37,16 @@ namespace System.Management.Automation.Language
             CompilationStrategy = DefaultCompilationStrategy;
         }
 
+        /// <summary>
+        /// Defines the runtime information for the keyword
+        /// </summary>
         public KeywordInfo KeywordInfo
         {
             get
             {
                 return (KeywordInfo)CommandInfo;
             }
-            set
+            internal set
             {
                 CommandInfo = value;
             }
@@ -117,7 +120,7 @@ namespace System.Management.Automation.Language
             }
 
             // Get the keyword constructor by getting the C# compiler to reinterpret the delegate from earlier
-            Expression<Func<Keyword>> keywordCtor = dllKeyword.KeywordInfo.KeywordCtorExpression;
+            Expression keywordInstantiation = dllKeyword.KeywordInfo.CreateNewKeywordExpression;
 
             Expression invocationCall = null;
             switch (kwAst.Keyword.BodyMode)
@@ -133,7 +136,7 @@ namespace System.Management.Automation.Language
                     Expression cmdArgsArray = Expression.NewArrayInit(typeof(CommandParameterInternal), cmdArgs);
 
                     // Compile the keyword invocation itself
-                    invocationCall = Expression.Call(KeywordProcessorCache.CachedInvokeCommandKeyword, contextVariable, keywordCtor, cmdArgsArray);
+                    invocationCall = Expression.Call(KeywordProcessorCache.CachedInvokeCommandKeyword, contextVariable, keywordInstantiation, cmdArgsArray);
                     break;
 
                 case DynamicKeywordBodyMode.Hashtable:
@@ -150,7 +153,7 @@ namespace System.Management.Automation.Language
                     Expression body = compiler.Compile(kwAst.BodyExpression);
 
                     // Compile the keyword invocation, passing in the arguments and hashtable body
-                    invocationCall = Expression.Call(KeywordProcessorCache.CachedInvokeHashtableKeyword, contextVariable, keywordCtor, hashtableArgsArray, body);
+                    invocationCall = Expression.Call(KeywordProcessorCache.CachedInvokeHashtableKeyword, contextVariable, keywordInstantiation, hashtableArgsArray, body);
                     break;
 
                 case DynamicKeywordBodyMode.ScriptBlock:
@@ -177,7 +180,7 @@ namespace System.Management.Automation.Language
                     Expression childBlock = compiler.Compile(statementBody);
 
                     // Compile the keyword invocation itself, passing in the arguments and the child block
-                    Expression topInvocation = Expression.Call(KeywordProcessorCache.CachedEnterScriptBlockKeywordScope, contextVariable, keywordCtor, scriptBlockArgsArray);
+                    Expression topInvocation = Expression.Call(KeywordProcessorCache.CachedEnterScriptBlockKeywordScope, contextVariable, keywordInstantiation, scriptBlockArgsArray);
 
                     invocationCall = Expression.Block(typeof(void), topInvocation, childBlock);
                     break;
@@ -238,10 +241,14 @@ namespace System.Management.Automation.Language
         /// <param name="other">the other instance of KeywordInfo</param>
         internal KeywordInfo(KeywordInfo other) : this(other.KeywordData, other.DefiningType, other.Definition)
         {
-            this._keywordCtorExpression = other._keywordCtorExpression;
-            this._keywordCtor = other._keywordCtor;
+            _keywordCtor = other._keywordCtor;
+            _keywordDefinitionInstance = other._keywordDefinitionInstance;
+            _keywordInfoField = other._keywordInfoField;
         }
 
+        /// <summary>
+        /// The source definition of the keyword
+        /// </summary>
         public override string Definition
         {
             get
@@ -262,48 +269,81 @@ namespace System.Management.Automation.Language
             }
         }
 
-        public bool IsNested { get; }
+        /// <summary>
+        /// True if the keyword is nested inside another keyword, false otherwise
+        /// </summary>
+        public bool IsNested
+        {
+            get
+            {
+                return KeywordData.IsNested;
+            }
+        }
 
+        /// <summary>
+        /// An instance of the keyword instantiated to retrieve its delegates
+        /// </summary>
         internal Keyword KeywordDefinitionInstance
         {
             get
             {
                 return _keywordDefinitionInstance ??
-                    (_keywordDefinitionInstance = KeywordCtor());
+                    (_keywordDefinitionInstance = (Keyword)KeywordCtor.Invoke(new object[0]));
             }
         }
         private Keyword _keywordDefinitionInstance;
 
-        internal Func<Keyword> KeywordCtor
+        /// <summary>
+        /// The constructor delegate for the keyword
+        /// </summary>
+        internal ConstructorInfo KeywordCtor
         {
             get
             {
-                if (_keywordCtor != null)
+                if (_keywordCtor == null)
                 {
-                    return _keywordCtor;
+                    _keywordCtor = DefiningType.GetConstructor(new Type[0]);
                 }
-                return (_keywordCtor = KeywordCtorExpression.Compile());
+                return _keywordCtor;
             }
         }
-        private Func<Keyword> _keywordCtor;
+        private ConstructorInfo _keywordCtor;
 
-        internal Expression<Func<Keyword>> KeywordCtorExpression
+        /// <summary>
+        /// An expression representing the keyword constructor
+        /// </summary>
+        internal Expression CreateNewKeywordExpression
         {
             get
             {
-                if (_keywordCtorExpression != null)
-                {
-                    return _keywordCtorExpression;
-                }
-
-                var ctorInfo = DefiningType.GetConstructor(new Type[0]);
-                return (_keywordCtorExpression = Expression.Lambda<Func<Keyword>>(Expression.New(ctorInfo)));
+                Keyword keyword = (Keyword)KeywordCtor.Invoke(new object[0]);
+                keyword.KeywordInfo = this;
+                return Expression.Constant(keyword);
             }
         }
-        private Expression<Func<Keyword>> _keywordCtorExpression;
 
+        internal PropertyInfo KeywordInfoField
+        {
+            get
+            {
+                if (_keywordInfoField == null)
+                {
+                    _keywordInfoField = DefiningType.GetProperty(nameof(Keyword.KeywordInfo), BindingFlags.NonPublic | BindingFlags.Public);
+                }
+
+                return _keywordInfoField;
+            }
+        }
+        private PropertyInfo _keywordInfoField;
+
+        /// <summary>
+        /// The CIL type that defines this keyword
+        /// </summary>
         internal Type DefiningType { get; }
 
+        /// <summary>
+        /// The metadata about the dynamic keyword
+        /// </summary>
         public DynamicKeyword KeywordData { get; }
 
         /// <summary>
@@ -361,7 +401,7 @@ namespace System.Management.Automation.Language
                 {
                     return _hasEnterScopeCall.Value;
                 }
-                MethodInfo enterScopeInfo = DefiningType.GetMethod(nameof(Keyword.RuntimeEnterScope), new [] { typeof(IEnumerable<Tuple<Keyword, object>>), typeof(object) });
+                MethodInfo enterScopeInfo = DefiningType.GetMethod(nameof(Keyword.RuntimeEnterScope), new [] { typeof(IEnumerable<Tuple<Keyword, object>>) });
                 bool isOverridden = enterScopeInfo.DeclaringType == DefiningType;
                 isOverridden &= enterScopeInfo.GetBaseDefinition().DeclaringType == typeof(Keyword);
                 _hasEnterScopeCall = isOverridden;
@@ -381,7 +421,7 @@ namespace System.Management.Automation.Language
                 {
                     return _hasLeaveScopeCall.Value;
                 }
-                MethodInfo leaveScopeInfo = DefiningType.GetMethod(nameof(Keyword.RuntimeLeaveScope), new [] { typeof(IEnumerable<Tuple<Keyword, object>>), typeof(List<object>), typeof(object) });
+                MethodInfo leaveScopeInfo = DefiningType.GetMethod(nameof(Keyword.RuntimeLeaveScope), new [] { typeof(IEnumerable<Tuple<Keyword, object>>), typeof(List<object>) });
                 bool isOverridden = leaveScopeInfo.DeclaringType == DefiningType;
                 isOverridden &= leaveScopeInfo.GetBaseDefinition().DeclaringType == typeof(Keyword);
                 _hasLeaveScopeCall = isOverridden;
@@ -474,12 +514,13 @@ namespace System.Management.Automation.Language
         /// and executing the runtime call provided. Returns the result of the keyword execution.
         /// </summary>
         /// <param name="context">the execution context the keyword runs in, provided for keyword state passing</param>
-        /// <param name="keywordCtor">the constructor to build a keyword instance</param>
+        /// <param name="keyword">a fresh instantiation of the keyword</param>
         /// <param name="parameters">the parameters passed to the keyword</param>
         /// <returns></returns>
-        private static object InvokeCommandKeyword(ExecutionContext context, Func<Keyword> keywordCtor, CommandParameterInternal[] parameters)
+        private static object InvokeCommandKeyword(ExecutionContext context, Keyword keyword, CommandParameterInternal[] parameters)
         {
-            Keyword keyword = InstantiateKeyword(keywordCtor, parameters);
+            keyword.Context = context;
+            BindKeywordParameters(keyword, parameters);
             return context.EngineSessionState.CurrentScope.DynamicKeywordRuntime.EnterScope(keyword);
         }
 
@@ -487,13 +528,14 @@ namespace System.Management.Automation.Language
         /// Execute a hashtable-bodied dynamic keyword with the parameters and body given and return the result
         /// </summary>
         /// <param name="context"></param>
-        /// <param name="keywordCtor"></param>
+        /// <param name="keyword"></param>
         /// <param name="parameters"></param>
         /// <param name="body"></param>
         /// <returns></returns>
-        private static object InvokeHashtableKeyword(ExecutionContext context, Func<Keyword> keywordCtor, CommandParameterInternal[] parameters, Hashtable body)
+        private static object InvokeHashtableKeyword(ExecutionContext context, Keyword keyword, CommandParameterInternal[] parameters, Hashtable body)
         {
-            Keyword keyword = InstantiateKeyword(keywordCtor, parameters);
+            keyword.Context = context;
+            BindKeywordParameters(keyword, parameters);
             AssignHashtableProperties(keyword, body);
             return context.EngineSessionState.CurrentScope.DynamicKeywordRuntime.EnterScope(keyword);
         }
@@ -502,12 +544,13 @@ namespace System.Management.Automation.Language
         /// 
         /// </summary>
         /// <param name="context"></param>
-        /// <param name="keywordCtor"></param>
+        /// <param name="keyword"></param>
         /// <param name="parameters"></param>
         /// <returns></returns>
-        private static object EnterScriptBlockKeywordScope(ExecutionContext context, Func<Keyword> keywordCtor, CommandParameterInternal[] parameters)
+        private static object EnterScriptBlockKeywordScope(ExecutionContext context, Keyword keyword, CommandParameterInternal[] parameters)
         {
-            Keyword keyword = InstantiateKeyword(keywordCtor, parameters);
+            keyword.Context = context;
+            BindKeywordParameters(keyword, parameters);
             return context.EngineSessionState.CurrentScope.DynamicKeywordRuntime.EnterScope(keyword);
         }
 
@@ -518,19 +561,6 @@ namespace System.Management.Automation.Language
         private static object LeaveKeywordScope(ExecutionContext context)
         {
             return context.EngineSessionState.CurrentScope.DynamicKeywordRuntime.LeaveScope();
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="keywordCtor"></param>
-        /// <param name="parameters"></param>
-        /// <returns></returns>
-        private static Keyword InstantiateKeyword(Func<Keyword> keywordCtor, CommandParameterInternal[] parameters)
-        {
-            Keyword keyword = keywordCtor();
-            BindKeywordParameters(keyword, parameters);
-            return keyword;
         }
 
         /// <summary>
@@ -1751,13 +1781,14 @@ namespace System.Management.Automation.Language
     internal class DynamicKeywordLoader
     {
 
-        private static void AssignKeywordInfo(DllDefinedDynamicKeyword keywordData, KeywordInfo keywordInfo)
+        private static void AssignKeywordInfo(KeyValuePair<DllDefinedDynamicKeyword, KeywordInfo> keywordAssignPair)
         {
-            keywordData.KeywordInfo = keywordInfo;
+            keywordAssignPair.Key.KeywordInfo = keywordAssignPair.Value;
         }
 
-        private readonly ImmutableDictionary<DllDefinedDynamicKeyword, Assembly> _keywordAssemblies;
         private readonly ImmutableList<DllDefinedDynamicKeyword> _topLevelKeywordsToLoad;
+
+        private ImmutableDictionary<DllDefinedDynamicKeyword, Assembly> _keywordAssemblies;
 
         public DynamicKeywordLoader(IEnumerable<DllDefinedDynamicKeyword> keywordsToLoad)
         {
@@ -1782,14 +1813,14 @@ namespace System.Management.Automation.Language
             var keywordAssemblies = new Dictionary<DllDefinedDynamicKeyword, Assembly>();
             foreach (var keyword in _topLevelKeywordsToLoad)
             {
-                if (loadedModules.ContainsKey(keyword.ImplementingModuleInfo))
+                if (!loadedModules.ContainsKey(keyword.ImplementingModuleInfo))
                 {
-                    keywordAssemblies[keyword] = loadedModules[keyword.ImplementingModuleInfo];
-                    continue;
+                    loadedModules.Add(keyword.ImplementingModuleInfo, ClrFacade.LoadFrom(keyword.ImplementingModuleInfo.Path));
                 }
 
-                loadedModules[keyword.ImplementingModuleInfo] = ClrFacade.LoadFrom(keyword.ImplementingModuleInfo.Path);
+                keywordAssemblies.Add(keyword, loadedModules[keyword.ImplementingModuleInfo]);
             }
+            _keywordAssemblies = keywordAssemblies.ToImmutableDictionary();
         }
 
         /// <summary>
@@ -1797,7 +1828,7 @@ namespace System.Management.Automation.Language
         /// </summary>
         private void LoadKeywords()
         {
-            var keywordDefinitions = new List<DictionaryTree<DllDefinedDynamicKeyword, KeywordInfo>>();
+            var keywordDefinitions = new List<Node<KeyValuePair<DllDefinedDynamicKeyword, KeywordInfo>>>();
             foreach(var keyword in _topLevelKeywordsToLoad)
             {
                 Type definingType = _keywordAssemblies[keyword].GetType(keyword.Keyword);
@@ -1805,7 +1836,7 @@ namespace System.Management.Automation.Language
                 {
                     throw PSTraceSource.NewInvalidOperationException("Keyword '{0}' not defined in assembly loaded from '{1}", keyword, keyword.ImplementingModuleInfo.Path);
                 }
-                keywordDefinitions.Add(ReadKeywordInfo(keyword, definingType.GetTypeInfo()));
+                keywordDefinitions.Add(ReadKeywordInfo(keyword, definingType));
             }
 
             foreach (var keywordDefinition in keywordDefinitions)
@@ -1821,12 +1852,12 @@ namespace System.Management.Automation.Language
         /// <param name="keyword">the data holder for the dynamic keyword to load</param>
         /// <param name="definingType">the loaded type representing the dynamic keyword</param>
         /// <returns></returns>
-        private DictionaryTree<DllDefinedDynamicKeyword, KeywordInfo> ReadKeywordInfo(DllDefinedDynamicKeyword keyword, Type definingType)
+        private Node<KeyValuePair<DllDefinedDynamicKeyword, KeywordInfo>> ReadKeywordInfo(DllDefinedDynamicKeyword keyword, Type definingType)
         {
-            var children = new List<DictionaryTree<DllDefinedDynamicKeyword, KeywordInfo>>();
+            var children = new List<Node<KeyValuePair<DllDefinedDynamicKeyword, KeywordInfo>>>();
             foreach (var innerKeyword in keyword.InnerKeywords.Values)
             {
-                Type nestedType = definingType.GetNestedType(innerKeyword.Keyword);
+                Type nestedType = definingType.GetNestedType(innerKeyword.Keyword, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                 if (nestedType == null)
                 {
                     throw PSTraceSource.NewInvalidOperationException("Inner keyword '{0}' is not defined within the type '{1}'", innerKeyword, definingType);
@@ -1836,25 +1867,18 @@ namespace System.Management.Automation.Language
             // TODO: Define what the definition string is for a given keyword
             KeywordInfo keywordInfo = new KeywordInfo(keyword, definingType, "<TODO>");
 
-            return new DictionaryNode<DllDefinedDynamicKeyword, KeywordInfo>(keyword, keywordInfo, children);
+            return new Node<KeyValuePair<DllDefinedDynamicKeyword, KeywordInfo>>(new KeyValuePair<DllDefinedDynamicKeyword, KeywordInfo>(keyword, keywordInfo), children);
         }
 
-        private interface DictionaryTree<K, V>
+        private class Node<T>
         {
-            void Process(Action<K, V> p);
-        }
+            private ImmutableList<Node<T>> _children;
+            private T _value;
 
-        private class DictionaryNode<K, V> : DictionaryTree<K, V>
-        {
-            private ImmutableList<DictionaryTree<K, V>> _children;
-            private readonly K _key;
-            private readonly V _value;
-
-            public DictionaryNode(K key, V value, IEnumerable<DictionaryTree<K, V>> children)
+            public Node(T value, IEnumerable<Node<T>> children)
             {
-                _key = key;
                 _value = value;
-                var acc = new List<DictionaryTree<K, V>>();
+                var acc = new List<Node<T>>();
                 foreach (var child in children)
                 {
                     acc.Add(child);
@@ -1862,30 +1886,13 @@ namespace System.Management.Automation.Language
                 _children = acc.ToImmutableList();
             }
 
-            public void Process(Action<K, V> p)
+            public void Process(Action<T> p)
             {
                 foreach (var child in _children)
                 {
                     child.Process(p);
                 }
-                p(_key, _value);
-            }
-        }
-
-        private class DictionaryLeaf<K, V> : DictionaryTree<K, V>
-        {
-            public DictionaryLeaf(K key, V value)
-            {
-                _key = key;
-                _value = value;
-            }
-
-            private readonly K _key;
-            private readonly V _value;
-
-            public void Process(Action<K, V> p)
-            {
-                p(_key, _value);
+                p(_value);
             }
         }
     }

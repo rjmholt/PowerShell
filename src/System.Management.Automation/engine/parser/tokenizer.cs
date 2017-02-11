@@ -569,7 +569,7 @@ namespace System.Management.Automation.Language
         /// Copy constructor for a DynamicKeyword
         /// </summary>
         /// <param name="other">the keyword to copy</param>
-        public DynamicKeyword(DynamicKeyword other)
+        private DynamicKeyword(DynamicKeyword other)
         {
             ImplementingModule = other.ImplementingModule;
             ImplementingModuleVersion = other.ImplementingModuleVersion;
@@ -601,7 +601,7 @@ namespace System.Management.Automation.Language
         /// Duplicates the DynamicKeyword
         /// </summary>
         /// <returns>A copy of the DynamicKeyword</returns>
-        public DynamicKeyword Copy()
+        public virtual DynamicKeyword Copy()
         {
             return new DynamicKeyword(this);
         }
@@ -706,6 +706,9 @@ namespace System.Management.Automation.Language
         }
         private Dictionary<string, DynamicKeywordParameter> _parameters;
 
+        /// <summary>
+        /// True iff this dynamic keyword is defined inside another dynamic keyword
+        /// </summary>
         public bool IsNested { get; set; }
 
         /// <summary>
@@ -724,9 +727,22 @@ namespace System.Management.Automation.Language
         public virtual Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck { get; set; }
     }
 
+    /// <summary>
+    /// Metadata about a Dynamic Keyword defined by loading in a compiled CIL module
+    /// </summary>
     public class DllDefinedDynamicKeyword : DynamicKeyword
     {
-        public DllDefinedDynamicKeyword(string name,
+        /// <summary>
+        /// Constructs a Dll-defined keyword from raw data
+        /// </summary>
+        /// <param name="name">the name of the keyword</param>
+        /// <param name="innerKeywords">keywords defined within this one</param>
+        /// <param name="parameters">parameters on this keyword</param>
+        /// <param name="properties">properties on this keyword</param>
+        /// <param name="bodyMode">the body mode of this keyword</param>
+        /// <param name="useMode">the use requirements of this keyword</param>
+        /// <param name="implementingModuleInfo">info on the module that defines this keyword</param>
+        internal DllDefinedDynamicKeyword(string name,
             IEnumerable<DynamicKeyword> innerKeywords,
             IEnumerable<DynamicKeywordParameter> parameters,
             IEnumerable<DynamicKeywordProperty> properties,
@@ -741,22 +757,15 @@ namespace System.Management.Automation.Language
 
             foreach (var innerKeyword in innerKeywords)
             {
-                if (innerKeyword is DllDefinedDynamicKeyword)
-                {
-                    InnerKeywords[innerKeyword.Keyword] = new DllDefinedDynamicKeyword((DllDefinedDynamicKeyword)innerKeyword);
-                }
-                else
-                {
-                    InnerKeywords[innerKeyword.Keyword] = new DynamicKeyword(innerKeyword);
-                }
+                InnerKeywords.Add(innerKeyword.Keyword, innerKeyword.Copy());
             }
             foreach (var parameter in parameters)
             {
-                Parameters[parameter.Name] = new DynamicKeywordParameter(parameter);
+                Parameters.Add(parameter.Name, new DynamicKeywordParameter(parameter));
             }
             foreach (var property in properties)
             {
-                Properties[property.Name] = new DynamicKeywordProperty(property);
+                Properties.Add(property.Name, new DynamicKeywordProperty(property));
             }
 
             DirectCall = false;
@@ -765,10 +774,49 @@ namespace System.Management.Automation.Language
             HasReservedProperties = false;
         }
 
-        public DllDefinedDynamicKeyword(DllDefinedDynamicKeyword other) : base(other)
+        /// <summary>
+        /// Copy constructor
+        /// </summary>
+        /// <param name="other">the existing DllDefinedDynamicKeyword instance</param>
+        private DllDefinedDynamicKeyword(DllDefinedDynamicKeyword other)
         {
-            KeywordInfo = new KeywordInfo(other.KeywordInfo);
+            if (other.KeywordInfo != null)
+            {
+                KeywordInfo = new KeywordInfo(other.KeywordInfo);
+            }
+
             ImplementingModuleInfo = other.ImplementingModuleInfo;
+            Keyword = other.Keyword;
+            ResourceName = other.ResourceName;
+            BodyMode = other.BodyMode;
+            UseMode = other.UseMode;
+            DirectCall = other.DirectCall;
+            NameMode = other.NameMode;
+            MetaStatement = other.MetaStatement;
+            IsReservedKeyword = other.IsReservedKeyword;
+            HasReservedProperties = other.HasReservedProperties;
+            IsNested = other.IsNested;
+            foreach (KeyValuePair<string, DynamicKeywordProperty> entry in other.Properties)
+            {
+                Properties.Add(entry.Key, new DynamicKeywordProperty(entry.Value));
+            }
+            foreach (KeyValuePair<string, DynamicKeywordParameter> entry in other.Parameters)
+            {
+                Parameters.Add(entry.Key, new DynamicKeywordParameter(entry.Value));
+            }
+            foreach (KeyValuePair<string, DynamicKeyword> entry in other.InnerKeywords)
+            {
+                InnerKeywords.Add(entry.Key, entry.Value.Copy());
+            }
+        }
+
+        /// <summary>
+        /// Create a copy of this keyword instance
+        /// </summary>
+        /// <returns></returns>
+        public override DynamicKeyword Copy()
+        {
+            return new DllDefinedDynamicKeyword(this);
         }
 
         /// <summary>
@@ -781,6 +829,9 @@ namespace System.Management.Automation.Language
         /// </summary>
         public PSModuleInfo ImplementingModuleInfo { get; set; }
 
+        /// <summary>
+        /// The name of the module that implements this keyword
+        /// </summary>
         public override string ImplementingModule
         {
             get
@@ -794,6 +845,9 @@ namespace System.Management.Automation.Language
             }
         }
 
+        /// <summary>
+        /// The version of the module that implements this keyword
+        /// </summary>
         public override Version ImplementingModuleVersion
         {
             get
@@ -807,6 +861,9 @@ namespace System.Management.Automation.Language
             }
         }
 
+        /// <summary>
+        /// The action to execute before this keyword is parsed
+        /// </summary>
         public override Func<DynamicKeyword, ParseError[]> PreParse
         {
             get
@@ -825,6 +882,9 @@ namespace System.Management.Automation.Language
             }
         }
 
+        /// <summary>
+        /// The action to execute as soon as this keyword has been parsed
+        /// </summary>
         public override Func<DynamicKeywordStatementAst, ParseError[]> PostParse
         {
             get
@@ -843,6 +903,9 @@ namespace System.Management.Automation.Language
             }
         }
 
+        /// <summary>
+        /// A method checking the semantics of an invocation of this keyword once parsed
+        /// </summary>
         public override Func<DynamicKeywordStatementAst, ParseError[]> SemanticCheck
         {
             get

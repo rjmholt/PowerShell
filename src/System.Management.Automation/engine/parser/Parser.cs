@@ -3414,10 +3414,6 @@ namespace System.Management.Automation.Language
         /// <returns></returns>
         private StatementAst DynamicKeywordStatementRule(Token functionName, DynamicKeyword keywordData)
         {
-            // TODO: Turn this into an explicit boolean property of DynamicKeyword, or something like that
-            // to distinguish between compiled-module keywords and function-defined keywords
-            bool isFunctionDefined = keywordData.ImplementingKeyword == null;
-
             // Check the UseMode of the keyword allows its invocation
             if (!DynamicKeyword.TryRecordKeywordUse(keywordData))
             {
@@ -3473,13 +3469,13 @@ namespace System.Management.Automation.Language
             else
             {
                 StatementAst astResult;
-                if (keywordData.KeywordInfo.DefiningType != null)
+                if (keywordData is DllDefinedDynamicKeyword)
                 {
-                    astResult = FunctionDefinedDynamicKeywordStatementRule(functionName, keywordData);
+                    astResult = DllDefinedDynamicKeywordStatementRule(functionName, keywordData);
                 }
                 else
                 {
-                    astResult = DllDefinedDynamicKeywordStatementRule(functionName, keywordData);
+                    astResult = FunctionDefinedDynamicKeywordStatementRule(functionName, keywordData);
                 }
 
                 dynamicKeywordAst = astResult as DynamicKeywordStatementAst;

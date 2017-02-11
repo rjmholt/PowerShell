@@ -10,10 +10,9 @@ public class SimpleRuntimeKeyword : Keyword
 {
     public SimpleRuntimeKeyword()
     {
-        RuntimeEnterScopeCall = TestExecution;
     }
 
-    private static object TestExecution(Keyword thisKeyword, IEnumerable<Tuple<Keyword, object>> keywordStack)
+    public override object RuntimeLeaveScope(IEnumerable<Tuple<Keyword, object>> keywordStack, List<object> childResults)
     {
         throw new Exception("Evil");
     }
@@ -24,13 +23,15 @@ public class ParameterizedRuntimeKeyword : Keyword
 {
     public ParameterizedRuntimeKeyword()
     {
-        RuntimeLeaveScopeCall = (thisKeyword, keywordStack, childResults) => {
-            return "Your greeting was: " + Greeting;
-        };
     }
 
     [KeywordParameter(Position = 0)]
     public string Greeting { get; set; }
+
+    public override object RuntimeLeaveScope(IEnumerable<Tuple<Keyword, object>> keywordStack, List<object> childResults)
+    {
+        return "Greeting: " + Greeting;
+    }
 }
 
 [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
@@ -38,17 +39,21 @@ public class OuterRuntimeKeyword : Keyword
 {
     public OuterRuntimeKeyword()
     {
-        RuntimeLeaveScopeCall = DeliverResults;
+    }
 
-        List<object> DeliverResults(Keyword thisKeyword, IEnumerable<Tuple<Keyword, object>> keywordStack, List<object> childResults)
+    public override object RuntimeLeaveScope(IEnumerable<Tuple<Keyword, object>> keywordStack, List<object> childResults)
+    {
+        return DeliverResults(keywordStack, childResults);
+    }
+
+    List<object> DeliverResults(IEnumerable<Tuple<Keyword, object>> keywordStack, List<object> childResults)
+    {
+        var results = new List<object>{ "I'm outside" };
+        foreach (var result in childResults)
         {
-            var results = new List<object>{ "I'm outside" };
-            foreach (var result in childResults)
-            {
-                results.Add(result);
-            }
-            return results;
+            results.Add(result);
         }
+        return results;
     }
 
     [Keyword()]
@@ -56,9 +61,11 @@ public class OuterRuntimeKeyword : Keyword
     {
         public InnerRuntimeKeyword()
         {
-            RuntimeLeaveScopeCall = (thisKeyword, keywordStack, childResults) => {
-                return "I'm inside";
-            };
+        }
+
+        public override object RuntimeLeaveScope(IEnumerable<Tuple<Keyword, object>> keywordStack, List<object> childResults)
+        {
+            return "I'm inside";
         }
     }
 }
@@ -82,15 +89,11 @@ public class CustomTypeKeyword : Keyword
     {
         DataNum = 7;
         DataString = "Hello";
+    }
 
-        RuntimeLeaveScopeCall = (thisKeyword, keywordStack, childResults) => {
-            var keyword = thisKeyword as CustomTypeKeyword;
-            if (keyword == null)
-            {
-                throw new ArgumentOutOfRangeException("Must call keyword on itself");
-            }
-            return new MyData(keyword.DataNum, keyword.DataString);
-        };
+    public override object RuntimeLeaveScope(IEnumerable<Tuple<Keyword, object>> keywordStack, List<object> childResults)
+    {
+        return new MyData(DataNum, DataString);
     }
 
     [KeywordParameter()]
