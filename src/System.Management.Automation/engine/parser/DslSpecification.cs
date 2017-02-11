@@ -52,7 +52,6 @@ namespace System.Management.Automation.Language
             }
         }
 
-
         /// <summary>
         /// Specifies the action to execute before the parser hits
         /// the body of a keyword
@@ -103,6 +102,20 @@ namespace System.Management.Automation.Language
         public virtual object RuntimeLeaveScope(IEnumerable<Tuple<Keyword, object>> parentKeywordSetups, List<object> childResults)
         {
             throw new NotImplementedException();
+        }
+
+        internal object EnterScope()
+        {
+            if (Context == null)
+            {
+                throw PSTraceSource.NewArgumentNullException(nameof(this.Context));
+            }
+            return Context.EngineSessionState.CurrentScope.DynamicKeywordRuntime.EnterScope(this);
+        }
+
+        internal object LeaveScope()
+        {
+            return Context.EngineSessionState.CurrentScope.DynamicKeywordRuntime.LeaveScope();
         }
 
         private static Expression DefaultCompilationStrategy(Compiler compiler, ParameterExpression contextVariable, DynamicKeywordStatementAst kwAst)
@@ -521,7 +534,7 @@ namespace System.Management.Automation.Language
         {
             keyword.Context = context;
             BindKeywordParameters(keyword, parameters);
-            return context.EngineSessionState.CurrentScope.DynamicKeywordRuntime.EnterScope(keyword);
+            return keyword.EnterScope();
         }
 
         /// <summary>
@@ -537,7 +550,7 @@ namespace System.Management.Automation.Language
             keyword.Context = context;
             BindKeywordParameters(keyword, parameters);
             AssignHashtableProperties(keyword, body);
-            return context.EngineSessionState.CurrentScope.DynamicKeywordRuntime.EnterScope(keyword);
+            return keyword.EnterScope();
         }
 
         /// <summary>
@@ -551,7 +564,7 @@ namespace System.Management.Automation.Language
         {
             keyword.Context = context;
             BindKeywordParameters(keyword, parameters);
-            return context.EngineSessionState.CurrentScope.DynamicKeywordRuntime.EnterScope(keyword);
+            return keyword.EnterScope();
         }
 
         /// <summary>

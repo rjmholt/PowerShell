@@ -1,14 +1,54 @@
 using System.Management.Automation;
 using System.Management.Automation.Language;
+using System.Management.Automation.Runspaces;
+using System.Management.Automation.Internal;
+using System.Collections;
+using System.Collections.Generic;
+using System.Collections.Concurrent;
+using System.Reflection;
+using System;
 
 [Keyword(Body = DynamicKeywordBodyMode.ScriptBlock)]
 public class TypeExtension : Keyword
 {
+    private static MethodInfo GetMethodInfo(string referencedTypeName, string referencedMethodName)
+    {
+        Type refType = Type.GetType(referencedTypeName, throwOnError: true, ignoreCase: true);
+        return refType.GetMethod(referencedMethodName, BindingFlags.Static | BindingFlags.Public | BindingFlags.IgnoreCase);
+    }
+
     // The type to extend
     [KeywordParameter(Position = 0, Mandatory = true)]
-    public Type ExtendedType
-    { get; set; }
+    public string ExtendedType { get; set; }
 
+    private TypeData _typeData;
+
+    public override object RuntimeEnterScope(IEnumerable<Tuple<Keyword, object>> parentKeywordSetups)
+    {
+        _typeData = new TypeData(ExtendedType);
+        return _typeData;
+    }
+
+    public override object RuntimeLeaveScope(IEnumerable<Tuple<Keyword, object>> parentKeywordSetups, List<object> childResults)
+    {
+        var errors = new ConcurrentBag<string>();
+
+        PropertyInfo contextProperty = typeof(TypeExtension).GetProperty("Context", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+        Console.WriteLine("contextProperty");
+        object context = contextProperty.GetValue(this, BindingFlags.NonPublic, null, null, null);
+        Console.WriteLine("context");
+        PropertyInfo typeTableProperty = context.GetType().GetProperty("TypeTable", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+        Console.WriteLine("typeTableProperty");
+        object typeTable = typeTableProperty.GetValue(context, BindingFlags.NonPublic, null, null, null);
+        Console.WriteLine("typeTable");
+        MethodInfo processType = typeTable.GetType().GetMethod("ProcessTypeDataToAdd", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+        Console.WriteLine("processType");
+
+        processType.Invoke(typeTable, new object[] { errors, _typeData });
+
+        return errors;
+    }
+    
     // Add a method to the type
     [Keyword()]
     public class Method : Keyword
@@ -16,11 +56,6 @@ public class TypeExtension : Keyword
         // Parameter sets:
         //   -Name <string> -ScriptMethod <ScriptBlock> -- add a method defined by a scriptblock
         //   -Name <string> -CodeReference <string>     -- add a method aliasing an existing C# method
-
-        public Method()
-        {
-            SemanticCheck = CheckParameters;
-        }
 
         [KeywordParameter(Position = 0, Mandatory = true)]
         public string Name { get; set; }
@@ -36,40 +71,30 @@ public class TypeExtension : Keyword
         [KeywordParameter()]
         public string ReferencedType { get; set; }
 
-        private static ParseError[] CheckParameters(DynamicKeywordStatementAst kwStmt)
+        public override object RuntimeLeaveScope(IEnumerable<Tuple<Keyword, object>> parentKeywordSetups, List<object> childResults)
         {
-            var errors = new List<ParseError>();
-
-            DynamicKeyword keyword = kwStmt.Keyword;
-
-            if (keyword.Properties.Contains("ScriptMethod"))
+            TypeData td = null;
+            foreach (var result in parentKeywordSetups)
             {
-                if (keyword.Properties.Contains("CodeReference")))
+                if (result.Item2 is TypeData)
                 {
-                    return new [] { new ParseError(kwStmt.Extent, "NonAllowedParameter", "The CodeReference parameter is not in the ScriptMethod set") };
+                    td = (TypeData)result.Item2;
                 }
             }
-            else if (keyword.Properties.Contains("CodeReference"))
-            {
-                if (keyword.Properties.Contains("ScriptMethod"))
-                {
-                    return new [] { new ParseError(kwStmt.Extent, "NonAllowedParameter", "The ScriptMethod parameter is not in the CodeReference set") };
-                }
 
-                string codeRef = keyword.Properties["CodeReference"];
-                Type referencedType = Type.GetType()
-            }
-            else
+            if (ScriptMethod != null)
             {
-                return new [] { new ParseError(kwStmt.Extent, "MissingParameter", "Either ScriptMethod or CodeReference is required") };
+                td.Members.Add(Name, new ScriptMethodData(Name, ScriptMethod));
+                return null;
             }
 
-            return null;
-        }
+            if (!(String.IsNullOrEmpty(CodeReference) || String.IsNullOrEmpty(ReferencedType)))
+            {
+                td.Members.Add(Name, new CodeMethodData(Name, GetMethodInfo(ReferencedType, CodeReference)));
+                return null;
+            }
 
-        private static void AddScriptMethod(Type extendedType, string methodName, ScriptBlock methodBody)
-        {
-
+            throw new Exception("Necessary parameters were not provided");
         }
     }
 
@@ -89,7 +114,7 @@ public class TypeExtension : Keyword
         [KeywordParameter()]
         public string Alias { get; set; }
 
-        [KeywordParameter(Positon = 1)]
+        [KeywordParameter(Position = 1)]
         public ScriptBlock ScriptProperty { get; set; }
 
         [KeywordParameter()]
@@ -97,5 +122,46 @@ public class TypeExtension : Keyword
 
         [KeywordParameter()]
         public string CodeReference { get; set; }
+
+        [KeywordParameter()]
+        public string ReferencedType { get; set; }
+
+        public override object RuntimeLeaveScope(IEnumerable<Tuple<Keyword, object>> parentKeywordSetups, List<object> childResults)
+        {
+            TypeData td = null;
+            foreach (var result in parentKeywordSetups)
+            {
+                if (result.Item2 is TypeData)
+                {
+                    td = (TypeData)result.Item2;
+                }
+            }
+
+            if (ScriptProperty != null)
+            {
+                 td.Members.Add(Name, new ScriptPropertyData(Name, ScriptProperty));
+                 return null;
+            }
+
+            if (NoteProperty != null)
+            {
+                td.Members.Add(Name, new NotePropertyData(Name, NoteProperty));
+                return null;
+            }
+
+            if (!String.IsNullOrEmpty(Alias))
+            {
+                td.Members.Add(Name, new AliasPropertyData(Name, Alias));
+                return null;
+            }
+
+            if (!(String.IsNullOrEmpty(CodeReference) || String.IsNullOrEmpty(ReferencedType)))
+            {
+                td.Members.Add(Name, new CodePropertyData(Name, GetMethodInfo(ReferencedType, CodeReference)));
+                return null;
+            }
+
+            throw new Exception("Not enough parameters provided");
+        }
     }
 }

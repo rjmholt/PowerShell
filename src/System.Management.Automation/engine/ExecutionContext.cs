@@ -1135,7 +1135,7 @@ namespace System.Management.Automation
                 return _typeTable;
             }
             // This needs to exist so that RunspaceConfiguration can
-            // push it's shared type table into ExecutionContext
+            // push its shared type table into ExecutionContext
             set
             {
                 if (this.RunspaceConfiguration != null)
