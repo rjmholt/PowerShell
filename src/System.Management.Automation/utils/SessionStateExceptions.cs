@@ -403,6 +403,11 @@ namespace System.Management.Automation
         /// Used when an exception is thrown accessing a cmdlet.
         /// </summary>
         Cmdlet = 9,
+
+        /// <summary>
+        /// Used when an exception is thrown when accessing a dynamic keyword.
+        /// </summary>
+        DynamicKeyword = 10,
     }
 
     /// <summary>

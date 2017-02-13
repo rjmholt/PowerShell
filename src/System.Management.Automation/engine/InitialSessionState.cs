@@ -833,6 +833,53 @@ namespace System.Management.Automation.Runspaces
         public string HelpFile { get; private set; }
     }
 
+    /// <summary>
+    /// Command lookup table entry for DynamicKeyword commands
+    /// </summary>
+    public sealed class SessionStateDynamicKeywordEntry : SessionStateCommandEntry
+    {
+        /// <summary>
+        /// Construct a DynamicKeyword entry around a DynamicKeyword data object
+        /// </summary>
+        /// <param name="name"></param>
+        /// <param name="implementingType"></param>
+        public SessionStateDynamicKeywordEntry(DllDefinedDynamicKeyword keywordData) : base(keywordData.Keyword, SessionStateEntryVisibility.Public)
+        {
+            if (keywordData == null)
+            {
+                throw PSTraceSource.NewArgumentNullException(nameof(keywordData));
+            }
+
+            CommandType = CommandTypes.DynamicKeyword;
+            KeywordData = keywordData;
+        }
+
+        /// <summary>
+        /// The type of the Keyword that this command invokes
+        /// </summary>
+        public Type ImplementingType
+        {
+            get
+            {
+                return KeywordData.KeywordInfo?.DefiningType;
+            }
+        }
+        
+        /// <summary>
+        /// The DynamicKeyword data records most of the relevant information about the keyword in this entry
+        /// </summary>
+        public DllDefinedDynamicKeyword KeywordData { get; private set; }
+
+        /// <summary>
+        /// Create a shallow clone of the keyword entry
+        /// </summary>
+        /// <returns></returns>
+        public override InitialSessionStateEntry Clone()
+        {
+            return new SessionStateDynamicKeywordEntry(KeywordData);
+        }
+    }
+
 #if !CORECLR // Workflow Not Supported On CSS
     /// <summary>
     /// 

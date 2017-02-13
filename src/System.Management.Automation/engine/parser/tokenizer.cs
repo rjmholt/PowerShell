@@ -696,7 +696,7 @@ namespace System.Management.Automation.Language
         /// <summary>
         /// A list of the parameters allowed for this constuctor.
         /// </summary>
-        public Dictionary<string, DynamicKeywordParameter> Parameters
+        public virtual Dictionary<string, DynamicKeywordParameter> Parameters
         {
             get
             {
@@ -744,7 +744,7 @@ namespace System.Management.Automation.Language
         /// <param name="implementingModuleInfo">info on the module that defines this keyword</param>
         internal DllDefinedDynamicKeyword(string name,
             IEnumerable<DynamicKeyword> innerKeywords,
-            IEnumerable<DynamicKeywordParameter> parameters,
+            IDictionary<string, IDictionary<string, DynamicKeywordParameter>> parameterSets,
             IEnumerable<DynamicKeywordProperty> properties,
             DynamicKeywordBodyMode bodyMode,
             DynamicKeywordUseMode useMode,
@@ -759,9 +759,13 @@ namespace System.Management.Automation.Language
             {
                 InnerKeywords.Add(innerKeyword.Keyword, innerKeyword.Copy());
             }
-            foreach (var parameter in parameters)
+            foreach (KeyValuePair<string, IDictionary<string, DynamicKeywordParameter>> parameterSet in parameterSets)
             {
-                Parameters.Add(parameter.Name, new DynamicKeywordParameter(parameter));
+                ParameterSets.Add(parameterSet.Key, new Dictionary<string, DynamicKeywordParameter>());
+                foreach (KeyValuePair<string, DynamicKeywordParameter> parameter in parameterSet.Value)
+                {
+                    ParameterSets[parameterSet.Key].Add(parameter.Key, new DynamicKeywordParameter(parameter.Value));
+                }
             }
             foreach (var property in properties)
             {
@@ -800,9 +804,13 @@ namespace System.Management.Automation.Language
             {
                 Properties.Add(entry.Key, new DynamicKeywordProperty(entry.Value));
             }
-            foreach (KeyValuePair<string, DynamicKeywordParameter> entry in other.Parameters)
+            foreach (KeyValuePair<string, Dictionary<string, DynamicKeywordParameter>> parameterSet in other.ParameterSets)
             {
-                Parameters.Add(entry.Key, new DynamicKeywordParameter(entry.Value));
+                ParameterSets.Add(parameterSet.Key, new Dictionary<string, DynamicKeywordParameter>());
+                foreach (KeyValuePair<string, DynamicKeywordParameter> parameter in parameterSet.Value)
+                {
+                    ParameterSets[parameterSet.Key].Add(parameter.Key, new DynamicKeywordParameter(parameter.Value));
+                }
             }
             foreach (KeyValuePair<string, DynamicKeyword> entry in other.InnerKeywords)
             {
@@ -923,6 +931,48 @@ namespace System.Management.Automation.Language
                 throw PSTraceSource.NewInvalidOperationException("Cannot set SemanticCheck action of DllDefinedDynamicKeyword");
             }
         }
+
+        /// <summary>
+        /// Parameters for this keyword, sorted into parameter sets
+        /// </summary>
+        public Dictionary<string, Dictionary<string, DynamicKeywordParameter>> ParameterSets
+        {
+            get
+            {
+                return _parameterSets ??
+                    (_parameterSets = new Dictionary<string, Dictionary<string, DynamicKeywordParameter>>(StringComparer.OrdinalIgnoreCase));
+            }
+        }
+        private Dictionary<string, Dictionary<string, DynamicKeywordParameter>> _parameterSets;
+
+        /// <summary>
+        /// Kludge to fulfil the contract of DynamicKeyword.Parameters without breaking the parent and any code
+        /// it might depend on. Rather than throwing an error, this will just provide a list of all parameters a
+        /// keyword might support.
+        /// </summary>
+        public override Dictionary<string, DynamicKeywordParameter> Parameters
+        {
+            get
+            {
+                if (_parameters == null)
+                {
+                    _parameters = new Dictionary<string, DynamicKeywordParameter>();
+                    foreach (var parameterSet in ParameterSets.Values)
+                    {
+                        foreach (var parameter in parameterSet.Values)
+                        {
+                            if (!_parameters.ContainsKey(parameter.Name))
+                            {
+                                _parameters.Add(parameter.Name, parameter);
+                            }
+                        }
+                    }
+                }
+
+                return _parameters;
+            }
+        }
+        private Dictionary<string, DynamicKeywordParameter> _parameters;
     }
 
     internal static class DynamicKeywordExtension
@@ -1086,6 +1136,11 @@ namespace System.Management.Automation.Language
         /// by name. A position of -1 indicates that it may be passed by name only
         /// </summary>
         public int Position { get; set; }
+
+        /// <summary>
+        /// The name of the set of parameters to which this parameter belongs
+        /// </summary>
+        public string ParameterSet { get; set; }
     }
 
     internal enum TokenizerMode

@@ -93,6 +93,18 @@ namespace System.Management.Automation
         {
             _currentMatch = null;
 
+            if (_currentState == SearchState.SearchingDynamicKeywords)
+            {
+                _currentMatch = SearchForDynamicKeywords();
+
+                if (_currentMatch != null)
+                {
+                    return true;
+                }
+
+                _currentState = SearchState.SearchingAliases;
+            }
+
             if (_currentState == SearchState.SearchingAliases)
             {
                 _currentMatch = SearchForAliases();
@@ -263,6 +275,19 @@ namespace System.Management.Automation
 
             return false;
         } // MoveNext
+
+        private CommandInfo SearchForDynamicKeywords()
+        {
+            CommandInfo currentMatch = null;
+
+            if (_context.EngineSessionState != null &&
+                (_commandTypes & CommandTypes.DynamicKeyword) != 0)
+            {
+                currentMatch = GetNextDynamicKeyword();
+            }
+
+            return currentMatch;
+        }
 
         private CommandInfo SearchForAliases()
         {
@@ -680,6 +705,20 @@ namespace System.Management.Automation
             return result;
         } // GetNextFromPath
 
+        private CommandInfo GetNextDynamicKeyword()
+        {
+            CommandInfo result = _context.EngineSessionState.GetKeyword(_commandName);
+
+            _currentState = SearchState.SearchingAliases;
+
+            if (result != null)
+            {
+                CommandDiscovery.discoveryTracer.WriteLine("Keyword found: {0}", result.Name);
+            }
+
+            return result;
+        }
+
         /// <summary>
         /// Gets the next matching alias
         /// </summary>
@@ -967,7 +1006,7 @@ namespace System.Management.Automation
                 else
                 {
                     CommandDiscovery.discoveryTracer.WriteLine(
-                        "Function found: {0}  {1}",
+                        "Function found: {0}",
                         function);
                 }
             }
@@ -1629,7 +1668,7 @@ namespace System.Management.Automation
                 _pathSearcher.Reset();
             }
             _currentMatch = null;
-            _currentState = SearchState.SearchingAliases;
+            _currentState = SearchState.SearchingDynamicKeywords;
             _matchingAlias = null;
             _matchingCmdlet = null;
             _matchingScript = null;
@@ -1663,11 +1702,14 @@ namespace System.Management.Automation
         /// <summary>
         /// The current state of the enumerator
         /// </summary>
-        private SearchState _currentState = SearchState.SearchingAliases;
+        private SearchState _currentState = SearchState.SearchingDynamicKeywords;
 
         private enum SearchState
         {
             // the searcher has been reset or has not been advanced since being created.
+            SearchingDynamicKeywords,
+
+            // the searcher has finished dynamic keyword resolution and now looking for aliases
             SearchingAliases,
 
             // the searcher has finished alias resolution and is now searching for functions.

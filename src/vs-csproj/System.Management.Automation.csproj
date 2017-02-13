@@ -2334,6 +2334,7 @@
     <Compile Include="..\System.Management.Automation\utils\Verbs.cs">
       <Link>utils\Verbs.cs</Link>
     </Compile>
+    <Compile Include="engine\SessionStateDynamicKeywordAPIs.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\System.Management.Automation\map.json">

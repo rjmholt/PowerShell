@@ -732,7 +732,7 @@ namespace System.Management.Automation
         }
 
         /// <summary>
-        /// Indicates that this parameter should not be shown to the user in this like intellisense
+        /// Indicates that this parameter should not be shown to the user in interfaces like intellisense
         /// This is primarily to be used in functions that are implementing the logic for dynamic keywords.
         /// </summary>
         public bool DontShow

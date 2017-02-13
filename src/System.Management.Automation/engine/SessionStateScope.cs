@@ -1760,6 +1760,174 @@ namespace System.Management.Automation
 
         #region DynamicKeywords
 
+        /// <summary>
+        /// 
+        /// </summary>
+        internal Dictionary<string, List<KeywordInfo>> DynamicKeywordTable
+        {
+            get
+            {
+                return _dynamicKeywords;
+            }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="keywordName"></param>
+        /// <returns></returns>
+        internal KeywordInfo GetDynamicKeyword(string keywordName)
+        {
+            KeywordInfo result = null;
+
+            List<KeywordInfo> keywords;
+            if (_dynamicKeywords.TryGetValue(keywordName, out keywords))
+            {
+                if (keywords?.Count > 0)
+                {
+                    result = keywords[0];
+                }
+            }
+            return result;
+        }
+
+        internal KeywordInfo AddDynamicKeywordToCache(
+            string name,
+            KeywordInfo keyword,
+            CommandOrigin origin,
+            ExecutionContext context)
+        {
+            bool throwNotSupported = false;
+            try
+            {
+                Diagnostics.Assert(
+                    !String.IsNullOrEmpty(name),
+                    "The caller should verify the name");
+
+                List<KeywordInfo> keywords;
+                if (!_dynamicKeywords.TryGetValue(name, out keywords))
+                {
+                    keywords = new List<KeywordInfo>();
+                    keywords.Add(keyword);
+                    _dynamicKeywords.Add(name, keywords);
+
+                    if ((keyword.Options & ScopedItemOptions.AllScope) != 0)
+                    {
+                        _allScopeDynamicKeywords[name].Insert(0, keyword);
+                    }
+                }
+                else
+                {
+                    if (!string.IsNullOrEmpty(keyword.ModuleName))
+                    {
+                        // Ensure we have not already imported the keyword from the same source
+                        foreach (KeywordInfo keywordInfo in keywords)
+                        {
+                            if (keyword.Module == keywordInfo.Module)
+                            {
+                                if (keyword.ImplementingType == keywordInfo.ImplementingType)
+                                {
+                                    // It is already added in the cache. Do not add it again
+                                    return null;
+                                }
+                                // Otherwise it's an error...
+                                throwNotSupported = true;
+                                break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // If there's no module name, then see if any keywords use the same type
+                        foreach (KeywordInfo keywordInfo in keywords)
+                        {
+                            if (keyword.ImplementingType == keywordInfo.ImplementingType)
+                            {
+                                // It's already in the cache so don't need to add it again...
+                                return null;
+                            }
+
+                            // Otherwise it's an error...
+                            throwNotSupported = true;
+                            break;
+                        }
+                    }
+                    // Insert the cmdlet if a duplicate doesn't already exist
+                    if (!throwNotSupported)
+                    {
+                        keywords.Insert(0, keyword);
+                    }
+                }
+            }
+
+            catch (ArgumentException)
+            {
+                throwNotSupported = true;
+            }
+
+            if (throwNotSupported)
+            {
+                PSNotSupportedException notSupported =
+                    PSTraceSource.NewNotSupportedException(
+                        DiscoveryExceptions.DuplicateCmdletName,
+                        keyword.Name);
+
+                throw notSupported;
+            }
+
+            return _dynamicKeywords[name][0];
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="name"></param>
+        /// <param name="index"></param>
+        /// <param name="force"></param>
+        internal void RemoveDynamicKeyword(string name, int index, bool force = false)
+        {
+            Diagnostics.Assert(
+                !String.IsNullOrEmpty(name),
+                "The caller should verify the name");
+
+            List<KeywordInfo> keywords;
+            if (_dynamicKeywords.TryGetValue(name, out keywords))
+            {
+                KeywordInfo tempKeyword = keywords[index];
+
+                if ((tempKeyword.Options & ScopedItemOptions.AllScope) != 0)
+                {
+                    _allScopeCmdlets[name].RemoveAt(index);
+                }
+
+                keywords.RemoveAt(index);
+
+                // Remove the entry is the list is now empty
+                if (keywords.Count == 0)
+                {
+                    //Remove the key
+                    _dynamicKeywords.Remove(name);
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="keywordData"></param>
+        internal void RemoveDynamicKeywordEntry(string name, bool force = false)
+        {
+            Diagnostics.Assert(!String.IsNullOrEmpty(name), "The caller must verify the name");
+
+            _dynamicKeywords.Remove(name);
+        }
+
+        internal void AddDynamicKeywordToCache(Language.DynamicKeyword keywordData)
+        {
+
+        }
+
         public Language.DynamicKeywordRuntimeContext DynamicKeywordRuntime
         {
             get
@@ -2038,6 +2206,16 @@ namespace System.Management.Automation
         /// </summary>
 
         private readonly Dictionary<string, List<CmdletInfo>> _allScopeCmdlets = new Dictionary<string, List<CmdletInfo>>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Table to hold all defined Dynamic Keywords in the current scope
+        /// </summary>
+        private readonly Dictionary<string, List<KeywordInfo>> _dynamicKeywords = new Dictionary<string, List<KeywordInfo>>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// 
+        /// </summary>
+        private readonly Dictionary<string, List<KeywordInfo>> _allScopeDynamicKeywords = new Dictionary<string, List<KeywordInfo>>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// The variable that represents $true in the language.
