@@ -409,6 +409,22 @@ namespace System.Management.Automation
             }
         }
 
+        internal CommandMetadata(Keyword keywordInstance)
+        {
+            if (keywordInstance == null)
+            {
+                throw PSTraceSource.NewArgumentNullException(nameof(keywordInstance));
+            }
+
+            Name = keywordInstance.KeywordInfo.Name;
+            CommandType = keywordInstance.KeywordInfo.ImplementingType;
+            InternalParameterMetadata parameterMetadata = InternalParameterMetadata.Get(CommandType, keywordInstance.Context, false);
+            ConstructKeywordMetadataUsingReflection();
+            _staticCommandParameterMetadata = MergeParameterMetadata(keywordInstance.Context, parameterMetadata, false);
+            _defaultParameterSetFlag = _staticCommandParameterMetadata.GenerateParameterSetMappingFromMetadata(_defaultParameterSetName);
+            _staticCommandParameterMetadata.MakeReadOnly();
+        }
+
         /// <summary>
         /// Constructor for creating command metadata from a script block. 
         /// </summary>
@@ -679,6 +695,34 @@ namespace System.Management.Automation
         #endregion internal members
 
         #region helper methods
+
+        private void ConstructKeywordMetadataUsingReflection()
+        {
+            Diagnostics.Assert(
+                CommandType != null,
+                "When the constructor is called with a type, it must be non-null to reflect on to construct the metadata");
+
+            _implementsDynamicParameters = false;
+
+            var customAttributes = CommandType.GetTypeInfo().GetCustomAttributes(false);
+
+            foreach (Attribute attribute in customAttributes)
+            {
+                if (attribute is KeywordAttribute)
+                {
+                    var keywordAttribute = attribute as KeywordAttribute;
+                    _defaultParameterSetName = keywordAttribute.DefaultParameterSetName;
+                }
+            }
+
+            SupportsShouldProcess = false;
+            ConfirmImpact = ConfirmImpact.None;
+            SupportsPaging = false;
+            SupportsTransactions = false;
+            HelpUri = String.Empty;
+            _remotingCapability = RemotingCapability.None;
+            PositionalBinding = false;
+        }
 
         /// <summary>
         /// Constructs the command metadata by using reflection against the

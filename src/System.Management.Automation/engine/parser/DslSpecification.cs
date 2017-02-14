@@ -21,6 +21,8 @@ using System.Management.Automation.Internal;
 
 namespace System.Management.Automation.Internal
 {
+    #region KeywordInfo
+
     /// <summary>
     /// Info class representing the runtime type information for a Dynamic Keyword
     /// </summary>
@@ -70,7 +72,7 @@ namespace System.Management.Automation.Internal
                 return _definition;
             }
         }
-        private string _definition;
+        private string _definition = String.Empty;
 
         /// <summary>
         /// The output type of a DynamicKeyword is just object. There may be a way to extract more information though
@@ -132,8 +134,12 @@ namespace System.Management.Automation.Internal
         {
             get
             {
-                return _keywordDefinitionInstance ??
-                    (_keywordDefinitionInstance = (Keyword)KeywordCtor.Invoke(new object[0]));
+                if (_keywordDefinitionInstance == null)
+                {
+                    _keywordDefinitionInstance = (Keyword)KeywordCtor.Invoke(new object[0]);
+                    _keywordDefinitionInstance.KeywordInfo = this;
+                }
+                return _keywordDefinitionInstance;
             }
         }
         private Keyword _keywordDefinitionInstance;
@@ -161,6 +167,8 @@ namespace System.Management.Automation.Internal
         {
             get
             {
+                // TODO: This could be made to operate at runtime rather than compile time,
+                // but doing so is fiddly and error prone.
                 Keyword keyword = (Keyword)KeywordCtor.Invoke(new object[0]);
                 keyword.KeywordInfo = this;
                 return Expression.Constant(keyword);
@@ -274,18 +282,35 @@ namespace System.Management.Automation.Internal
             }
         }
         private bool? _hasLeaveScopeCall;
+
+        internal override CommandMetadata CommandMetadata
+        {
+            get
+            {
+                if (_commandMetadata == null)
+                {
+                    KeywordDefinitionInstance.Context = Context;
+                    _commandMetadata = new CommandMetadata(KeywordDefinitionInstance);
+                }
+                return _commandMetadata;
+            }
+        }
+        private CommandMetadata _commandMetadata;
     }
 
+    #endregion /* KeywordInfo */
 }
 
-namespace System.Management.Automation.Language
+namespace System.Management.Automation
 {
+    #region Keyword Command Instance
+
     /// <summary>
     /// Specifies the semantic properties/actions that a
     /// DSL keyword must provide to the PowerShell runtime. This must
     /// be subclassed to instantiate a new PowerShell keyword
     /// </summary>
-    public abstract class Keyword : System.Management.Automation.Internal.InternalCommand
+    public abstract class Keyword : InternalCommand
     {
         /// <summary>
         /// Create a fresh empty instance of a keyword
@@ -305,13 +330,15 @@ namespace System.Management.Automation.Language
         {
             get
             {
+                var keywordInfo = (KeywordInfo)CommandInfo;
+                keywordInfo.Context = Context;
                 return (KeywordInfo)CommandInfo;
             }
             internal set
             {
-                if (value?.Context != null)
+                if (value != null)
                 {
-                    Context = value.Context;
+                    value.Context = Context;
                 }
                 CommandInfo = value;
             }
@@ -350,7 +377,7 @@ namespace System.Management.Automation.Language
         /// </summary>
         public Func<Compiler, ParameterExpression, DynamicKeywordStatementAst, Expression> CompilationStrategy
         {
-            get; set;
+            get;
         }
 
         /// <summary>
@@ -405,10 +432,10 @@ namespace System.Management.Automation.Language
             {
                 case DynamicKeywordBodyMode.Command:
                     // Compile any arguments
-                    var cmdArgs = new Expression[kwAst.CommandElements.Count-1];
+                    var cmdArgs = new Expression[kwAst.CommandElements.Count - 1];
                     for (int i = 1; i < kwAst.CommandElements.Count; i++)
                     {
-                        cmdArgs[i-1] = compiler.VisitCommandElement(kwAst.CommandElements[i]);
+                        cmdArgs[i - 1] = compiler.VisitCommandElement(kwAst.CommandElements[i]);
                     }
 
                     Expression cmdArgsArray = Expression.NewArrayInit(typeof(CommandParameterInternal), cmdArgs);
@@ -419,10 +446,10 @@ namespace System.Management.Automation.Language
 
                 case DynamicKeywordBodyMode.Hashtable:
                     // Compile any arguments
-                    var hashtableArgs = new Expression[kwAst.CommandElements.Count-2];
+                    var hashtableArgs = new Expression[kwAst.CommandElements.Count - 2];
                     for (int i = 1; i < kwAst.CommandElements.Count - 1; i++)
                     {
-                        hashtableArgs[i-1] = compiler.VisitCommandElement(kwAst.CommandElements[i]);
+                        hashtableArgs[i - 1] = compiler.VisitCommandElement(kwAst.CommandElements[i]);
                     }
 
                     Expression hashtableArgsArray = Expression.NewArrayInit(typeof(CommandParameterInternal), hashtableArgs);
@@ -436,10 +463,10 @@ namespace System.Management.Automation.Language
 
                 case DynamicKeywordBodyMode.ScriptBlock:
                     // Compile the argument elements
-                    var scriptBlockArgs = new Expression[kwAst.CommandElements.Count-2];
+                    var scriptBlockArgs = new Expression[kwAst.CommandElements.Count - 2];
                     for (int i = 1; i < kwAst.CommandElements.Count - 1; i++)
                     {
-                        scriptBlockArgs[i-1] = compiler.VisitCommandElement(kwAst.CommandElements[i]);
+                        scriptBlockArgs[i - 1] = compiler.VisitCommandElement(kwAst.CommandElements[i]);
                     }
 
                     Expression scriptBlockArgsArray = Expression.NewArrayInit(typeof(CommandParameterInternal), scriptBlockArgs);
@@ -482,6 +509,288 @@ namespace System.Management.Automation.Language
             }
 
             return Expression.Block(typeof(object), invocationCall, stackPop);
+        }
+
+        internal CommandMetadata GetCommandMetadata()
+        {
+            return new CommandMetadata(this);
+        }
+    }
+
+    #endregion /* Keyword Command Instance */
+
+    #region DSL definition attributes
+
+    /// <summary>
+    /// Specifies that a class denotes a DSL Keyword
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Class)]
+    public class KeywordAttribute : Attribute
+    {
+        /// <summary>
+        /// Construct a KeywordAttribute with default options set
+        /// </summary>
+        public KeywordAttribute()
+        {
+        }
+
+        /// <summary>
+        /// Specifies the body syntax expected after a keyword
+        /// </summary>
+        public DynamicKeywordBodyMode Body { get; set; } = DynamicKeywordBodyMode.Command;
+
+        /// <summary>
+        /// Specifies the number of times a keyword may be used
+        /// in a scope/block
+        /// </summary>
+        public DynamicKeywordUseMode Use { get; set; } = DynamicKeywordUseMode.OptionalMany;
+
+        /// <summary>
+        /// Specifies the name of the default parameter set in this keyword.
+        /// If none is specified, this will default to <see cref="KeywordParameterAttribute.AllParameterSets"/> 
+        /// </summary>
+        public string DefaultParameterSetName { get; set; }
+    }
+
+    /// <summary>
+    /// Specifies a field denoting a keyword argument
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = true)]
+    public sealed class KeywordParameterAttribute : Internal.ParsingBaseAttribute
+    {
+        /// <summary>
+        /// ParameterSetName referring to all ParameterSets
+        /// </summary>
+        public const string AllParameterSets = "__AllParameterSets";
+
+        /// <summary>
+        /// The value specifying that a parameter is not positional
+        /// </summary>
+        public const int NotPositional = Int32.MinValue;
+
+        /// <summary>
+        /// The default setting for mandatory parameters (is *not* mandatory)
+        /// </summary>
+        public const bool MandatoryDefault = false;
+
+        private string _parameterSetName = KeywordParameterAttribute.AllParameterSets;
+
+        /// <summary>
+        /// Constructs a KeywordParamterAttribute with default options set
+        /// </summary>
+        public KeywordParameterAttribute()
+        {
+        }
+
+        /// <summary>
+        /// Specifies whether an argument must be given. If this is false
+        /// and Name is null or empty, this should be an error.
+        /// </summary>
+        public bool Mandatory { get; set; } = MandatoryDefault;
+
+        /// <summary>
+        /// Specifies what position a parameter occurs at if not passed by name.
+        /// </summary>
+        public int Position { get; set; } = NotPositional;
+
+        /// <summary>
+        /// Delineates what parameter set the attributed parameter belongs to
+        /// </summary>
+        public string ParameterSetName
+        {
+            get
+            {
+                return _parameterSetName;
+            }
+
+            set
+            {
+                if (String.IsNullOrEmpty(value))
+                {
+                    _parameterSetName = AllParameterSets;
+                }
+                else
+                {
+                    _parameterSetName = value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// This object as a Cmdlet ParameterAttribute. Inheriting from ParameterAttribute
+        /// would allow users to set options that don't make sense, but changing the code inside
+        /// the attribute reading functionality could also break things
+        /// </summary>
+        public ParameterAttribute AsParameterAttribute
+        {
+            get
+            {
+                if (_parameterAttribute == null)
+                {
+                    _parameterAttribute = new ParameterAttribute();
+
+                    _parameterAttribute.Mandatory = Mandatory;
+                    _parameterAttribute.ParameterSetName = ParameterSetName;
+                    _parameterAttribute.Position = Position;
+
+                    _parameterAttribute.DontShow = false;
+                    _parameterAttribute.HelpMessage = "<TODO>";
+                    _parameterAttribute.ValueFromPipeline = false;
+                    _parameterAttribute.ValueFromPipelineByPropertyName = false;
+                    _parameterAttribute.ValueFromRemainingArguments = false;
+                }
+                return _parameterAttribute;
+            }
+        }
+        private ParameterAttribute _parameterAttribute;
+    }
+
+    /// <summary>
+    /// Denotes a property for a keyword specification. Currently this
+    /// would be a key in a hashmap body
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    public class KeywordPropertyAttribute : System.Management.Automation.Internal.ParsingBaseAttribute
+    {
+        /// <summary>
+        /// Constructs a KeywordPropertyAttribute with the default options set
+        /// </summary>
+        public KeywordPropertyAttribute()
+        {
+        }
+
+        /// <summary>
+        /// Specifies whether a property must be given for the keyword
+        /// </summary>
+        public bool Mandatory { get; set; } = false;
+    }
+
+    #endregion /* DSL definition attributes */
+
+
+    #region Runtime State
+
+    internal class DynamicKeywordParameterBinderController : ParameterBinderController
+    {
+        public DynamicKeywordParameterBinderController(Keyword keyword, ParameterBinderBase parameterBinder)
+            : base(keyword.MyInvocation, keyword.Context, parameterBinder)
+        {
+            Keyword = keyword;
+            CommandMetadata = keyword.KeywordInfo.CommandMetadata;
+
+            _bindableParameters = keyword.KeywordInfo.CommandMetadata.StaticCommandParameterMetadata;
+            UnboundParameters = new List<MergedCompiledCommandParameter>(_bindableParameters?.BindableParameters?.Values);
+        }
+
+        internal CommandMetadata CommandMetadata { get; }
+
+        internal Keyword Keyword { get; }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="parameters"></param>
+        /// <returns></returns>
+        internal override Collection<CommandParameterInternal> BindParameters(Collection<CommandParameterInternal> parameters)
+        {
+            return BindParameters(uint.MaxValue, parameters);
+        }
+
+        internal Collection<CommandParameterInternal> BindParameters(uint parameterSets, Collection<CommandParameterInternal> arguments)
+        {
+            Collection<CommandParameterInternal> result = new Collection<CommandParameterInternal>();
+
+            foreach (CommandParameterInternal argument in arguments)
+            {
+                if (!argument.ParameterNameSpecified)
+                {
+                    result.Add(argument);
+                    continue;
+                }
+
+                // We don't want to throw an exception yet because
+                // the parameter might be a positional argument or it
+                // might match up to a dynamic parameter
+                MergedCompiledCommandParameter parameter =
+                    BindableParameters.GetMatchingParameter(
+                        argument.ParameterName,
+                        false, true,
+                        new InvocationInfo(this.InvocationInfo.MyCommand, argument.ParameterExtent));
+
+                // If the parameter is not in the specified parameter set,
+                // throw a binding exception
+                if (parameter != null)
+                {
+                    // Now check to make sure it hasn't already been
+                    // bound by looking in the boundParameters collection
+
+                    if (BoundParameters.ContainsKey(parameter.Parameter.Name))
+                    {
+                        ParameterBindingException bindingException =
+                            new ParameterBindingException(
+                                ErrorCategory.InvalidArgument,
+                                this.InvocationInfo,
+                                GetParameterErrorExtent(argument),
+                                argument.ParameterName,
+                                null,
+                                null,
+                                ParameterBinderStrings.ParameterAlreadyBound,
+                                "ParameterAlreadyBound");
+
+                        // Multiple values assigned to the same parameter.
+                        // Not caused by default parameter binding
+                        throw bindingException;
+                    }
+
+                    if ((parameter.Parameter.ParameterSetFlags & parameterSets) == 0 &&
+                        !parameter.Parameter.IsInAllSets)
+                    {
+                        string parameterSetName = BindableParameters.GetParameterSetName(parameterSets);
+
+                        ParameterBindingException bindingException =
+                            new ParameterBindingException(
+                                ErrorCategory.InvalidArgument,
+                                Keyword.MyInvocation,
+                                null,
+                                argument.ParameterName,
+                                null,
+                                null,
+                                ParameterBinderStrings.ParameterNotInParameterSet,
+                                "ParameterNotInParameterSet",
+                                parameterSetName);
+
+                        // Might be caused by default parameter binding
+                        if (!DefaultParameterBindingInUse)
+                        {
+                            throw bindingException;
+                        }
+                        else
+                        {
+                            ThrowElaboratedBindingException(bindingException);
+                        }
+                    }
+
+                    try
+                    {
+                        BindParameter(parameterSets, argument, parameter,
+                            ParameterBindingFlags.ShouldCoerceType | ParameterBindingFlags.DelayBindScriptBlock);
+                    }
+                    catch (ParameterBindingException pbex)
+                    {
+                        if (!DefaultParameterBindingInUse)
+                        {
+                            throw;
+                        }
+
+                        ThrowElaboratedBindingException(pbex);
+                    }
+                }
+                else
+                {
+                    result.Add(argument);
+                }
+            }
+            return result;
         }
     }
 
@@ -626,7 +935,12 @@ namespace System.Management.Automation.Language
         {
             // TODO: Cache all this at parse time and pass it in when compiled
 
-            var parameterSets = keyword.KeywordInfo.KeywordData.ParameterSets;
+            var parameterBinder = new ReflectionParameterBinder(keyword, keyword);
+            var parameterBinderController = new DynamicKeywordParameterBinderController(keyword, parameterBinder);
+            parameterBinderController.BindParameters(new Collection<CommandParameterInternal>(parameters));
+
+            /*
+            var parameterSets = keyword.KeywordInfo.KeywordData.DllKeywordParameters;
 
             // Set to whittle down the possible sets we're in
             var possibleParameterSets = new HashSet<string>(parameterSets.Keys);
@@ -756,6 +1070,7 @@ namespace System.Management.Automation.Language
 
                 parameterInfo.SetValue(keyword, parameterValue);
             }
+            */
         }
 
         /// <summary>
@@ -797,126 +1112,11 @@ namespace System.Management.Automation.Language
         }
     }
 
-    #region DSL definition attributes
+    #endregion /* Runtime State */
+}
 
-    /// <summary>
-    /// Specifies that a class denotes a DSL Keyword
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Class)]
-    public class KeywordAttribute : Attribute
-    {
-        /// <summary>
-        /// Construct a KeywordAttribute with default options set
-        /// </summary>
-        public KeywordAttribute()
-        {
-        }
-
-        /// <summary>
-        /// Specifies the body syntax expected after a keyword
-        /// </summary>
-        public DynamicKeywordBodyMode Body { get; set; } = DynamicKeywordBodyMode.Command;
-
-        /// <summary>
-        /// Specifies the number of times a keyword may be used
-        /// in a scope/block
-        /// </summary>
-        public DynamicKeywordUseMode Use { get; set; } = DynamicKeywordUseMode.OptionalMany;
-
-        /// <summary>
-        /// Specifies the name of the default parameter set in this keyword.
-        /// If none is specified, this will default to <see cref="KeywordParameterAttribute.AllParameterSets"/> 
-        /// </summary>
-        public string DefaultParameterSetName { get; set; }
-    }
-
-    /// <summary>
-    /// Specifies a field denoting a keyword argument
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = true)]
-    public sealed class KeywordParameterAttribute : Internal.ParsingBaseAttribute
-    {
-        /// <summary>
-        /// ParameterSetName referring to all ParameterSets
-        /// </summary>
-        public const string AllParameterSets = "__AllParameterSets";
-
-        /// <summary>
-        /// The value specifying that a parameter is not positional
-        /// </summary>
-        public const int NotPositional = Int32.MinValue;
-
-        /// <summary>
-        /// The default setting for mandatory parameters (is *not* mandatory)
-        /// </summary>
-        public const bool MandatoryDefault = false;
-
-        private string _parameterSetName = KeywordParameterAttribute.AllParameterSets;
-
-        /// <summary>
-        /// Constructs a KeywordParamterAttribute with default options set
-        /// </summary>
-        public KeywordParameterAttribute()
-        {
-        }
-
-        /// <summary>
-        /// Specifies whether an argument must be given. If this is false
-        /// and Name is null or empty, this should be an error.
-        /// </summary>
-        public bool Mandatory { get; set; } = MandatoryDefault;
-
-        /// <summary>
-        /// Specifies what position a parameter occurs at if not passed by name.
-        /// </summary>
-        public int Position { get; set; } = NotPositional;
-
-        /// <summary>
-        /// Delineates what parameter set the attributed parameter belongs to
-        /// </summary>
-        public string ParameterSetName
-        {
-            get
-            {
-                return _parameterSetName;
-            }
-
-            set
-            {
-                if (String.IsNullOrEmpty(value))
-                {
-                    _parameterSetName = AllParameterSets;
-                }
-                else
-                {
-                    _parameterSetName = value;
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Denotes a property for a keyword specification. Currently this
-    /// would be a key in a hashmap body
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-    public class KeywordPropertyAttribute : System.Management.Automation.Internal.ParsingBaseAttribute
-    {
-        /// <summary>
-        /// Constructs a KeywordPropertyAttribute with the default options set
-        /// </summary>
-        public KeywordPropertyAttribute()
-        {
-        }
-
-        /// <summary>
-        /// Specifies whether a property must be given for the keyword
-        /// </summary>
-        public bool Mandatory { get; set; } = false;
-    }
-
-    #endregion /* DSL definition attributes */
-
+namespace System.Management.Automation.Language
+{
     #region DSL Metadata Reading
 
     /// <summary>
@@ -1077,8 +1277,9 @@ namespace System.Management.Automation.Language
         /// recursive descent.
         /// </summary>
         /// <param name="typeDef">the type definition object for the keyword class to be parsed</param>
+        /// <param name="isNested">whether the keyword is nested inside another keyword or not</param>
         /// <returns>the constructed DynamicKeyword from the parsed specification</returns>
-        private DllDefinedDynamicKeyword ReadKeywordSpecification(TypeDefinition typeDef)
+        private DllDefinedDynamicKeyword ReadKeywordSpecification(TypeDefinition typeDef, bool isNested = false)
         {
             // Register the keyword name
             string keywordName = _metadataReader.GetString(typeDef.Name);
@@ -1095,7 +1296,7 @@ namespace System.Management.Automation.Language
             // Read the custom keyword properties
             DynamicKeywordBodyMode bodyMode = DynamicKeywordBodyMode.Command;
             DynamicKeywordUseMode useMode = DynamicKeywordUseMode.OptionalMany;
-            string defaultParameterSetName = null;
+            string defaultParameterSetName = KeywordParameterAttribute.AllParameterSets;
             foreach (var keywordAttributeHandle in typeDef.GetCustomAttributes())
             {
                 var keywordAttribute = _metadataReader.GetCustomAttribute(keywordAttributeHandle);
@@ -1115,41 +1316,45 @@ namespace System.Management.Automation.Language
             var genericContext = new TypeNameGenericContext(genericTypeParameters, ImmutableArray<string>.Empty);
 
             // Read in all parameters and properties defined as class properties
-            var keywordParameterSet = new Dictionary<string, IDictionary<string, DynamicKeywordParameter>>();
+            var keywordParameters = new List<DllKeywordParameter>();
             var keywordProperties = new List<DynamicKeywordProperty>();
-            var parameterPositions = new Dictionary<string, HashSet<int>>();
+            var parameterPositions = new Dictionary<string, HashSet<int>> { { defaultParameterSetName, new HashSet<int>() } };
             foreach (var propertyHandle in typeDef.GetProperties())
             {
                 var property = _metadataReader.GetPropertyDefinition(propertyHandle);
+                var parameterSetSpecificProperties = new Dictionary<string, DynamicKeywordSetSpecificProperties>();
                 foreach (var attributeHandle in property.GetCustomAttributes())
                 {
                     var keywordMemberAttribute = _metadataReader.GetCustomAttribute(attributeHandle);
+                    // Collect all parameter attributes
                     if (IsKeywordParameterAttribute(keywordMemberAttribute))
                     {
-                        DynamicKeywordParameter param = ReadParameterSpecification(genericContext, defaultParameterSetName, property, keywordMemberAttribute);
+                        DynamicKeywordSetSpecificProperties paramSetProperties = ReadSetSpecificProperties(defaultParameterSetName, keywordMemberAttribute);
+                        parameterSetSpecificProperties.Add(paramSetProperties.SetName, paramSetProperties);
 
-                        if (!keywordParameterSet.ContainsKey(param.ParameterSet))
+                        if (paramSetProperties.Position != KeywordParameterAttribute.NotPositional)
                         {
-                            keywordParameterSet.Add(param.ParameterSet, new Dictionary<string, DynamicKeywordParameter>());
+                            if (parameterPositions[paramSetProperties.SetName].Contains(paramSetProperties.Position))
+                            {
+                                throw PSTraceSource.NewInvalidOperationException("Cannot give two parameters the same position");
+                            }
+                            else
+                            {
+                                parameterPositions[paramSetProperties.SetName].Add(paramSetProperties.Position);
+                            }
                         }
-                        if (!parameterPositions.ContainsKey(param.ParameterSet))
-                        {
-                            parameterPositions.Add(param.ParameterSet, new HashSet<int>());
-                        }
-
-                        if (parameterPositions[param.ParameterSet].Contains(param.Position))
-                        {
-                            throw PSTraceSource.NewInvalidOperationException("Cannot give two parameters the same position");
-                        }
-                        parameterPositions[param.ParameterSet].Add(param.Position);
-                        keywordParameterSet[param.ParameterSet].Add(param.Name, param);
                         break;
                     }
+                    // Otherwise look for property attributes
                     else if (IsKeywordPropertyAttribute(keywordMemberAttribute))
                     {
                         keywordProperties.Add(ReadPropertySpecification(genericContext, property, keywordMemberAttribute));
                         break;
                     }
+                }
+                if (parameterSetSpecificProperties.Count > 0)
+                {
+                    keywordParameters.Add(ReadParameterSpecification(genericContext, parameterSetSpecificProperties.Values, property));
                 }
             }
 
@@ -1166,7 +1371,7 @@ namespace System.Management.Automation.Language
                         // TODO: Make this more user-consumable
                         throw PSTraceSource.NewNotSupportedException("Cannot define keywords underneath a command-body keyword");
                     }
-                    DllDefinedDynamicKeyword innerKeyword = ReadKeywordSpecification(innerTypeDef);
+                    DllDefinedDynamicKeyword innerKeyword = ReadKeywordSpecification(innerTypeDef, isNested: true);
                     innerKeyword.IsNested = true;
                     innerKeywords.Add(innerKeyword);
                 }
@@ -1175,7 +1380,7 @@ namespace System.Management.Automation.Language
             _keywordDefinitionStack.Pop();
             _enumDefStack.Pop();
 
-            return new DllDefinedDynamicKeyword(keywordName, innerKeywords, keywordParameterSet, keywordProperties, bodyMode, useMode, _moduleInfo);
+            return new DllDefinedDynamicKeyword(keywordName, _moduleInfo, bodyMode, useMode, defaultParameterSetName, innerKeywords, keywordParameters, keywordProperties, isNested);
         }
 
         private bool IsKeywordParameterAttribute(CustomAttribute keywordParameterAttribute)
@@ -1228,47 +1433,42 @@ namespace System.Management.Automation.Language
         /// corresponding property, as well as reading in position/mandatory properties from the KeywordParameter attribute.
         /// </summary>
         /// <param name="property">the property representing the DynamicKeyword parameter</param>
-        /// <param name="keywordParameterAttribute">the attribute on the property declaring the parameter's properties (position, mandatory)</param>
+        /// <param name="setSpecificProperties">the attribute on the property declaring the parameter's set specific properties (position, mandatory)</param>
         /// <param name="genericContext">the generic type context in which the property is used</param>
         /// <returns></returns>
-        private DynamicKeywordParameter ReadParameterSpecification(TypeNameGenericContext genericContext, string defaultParameterSetName, PropertyDefinition property, CustomAttribute keywordParameterAttribute)
+        private DllKeywordParameter ReadParameterSpecification(TypeNameGenericContext genericContext,
+            IEnumerable<DynamicKeywordSetSpecificProperties> setSpecificProperties, PropertyDefinition property)
         {
             string parameterName = _metadataReader.GetString(property.Name);
-            string parameterType = property.DecodeSignature(TypeNameProvider, genericContext).ReturnType.ToString();
+            string parameterType = property.DecodeSignature(TypeNameProvider, genericContext).ReturnType;
 
-            CustomAttributeValue<Type> paramAttrValue = keywordParameterAttribute.DecodeValue(TypeLookupProvider);
+            IEnumerable<string> typeValues = TryGetEnumValues(parameterType);
+
+            var dkParameter = new DllKeywordParameter(parameterName, parameterType, typeValues ?? new string[0], new string[0], setSpecificProperties);
+            return dkParameter;
+        }
+
+        private DynamicKeywordSetSpecificProperties ReadSetSpecificProperties(string defaultParameterSetName, CustomAttribute keywordParameterAttribute)
+        {
             int position = KeywordParameterAttribute.NotPositional;
             bool mandatory = KeywordParameterAttribute.MandatoryDefault;
             string parameterSet = defaultParameterSetName;
-
-            foreach (var paramProperty in paramAttrValue.NamedArguments)
+            foreach (var attributeProperty in keywordParameterAttribute.DecodeValue(TypeLookupProvider).NamedArguments)
             {
-                switch (paramProperty.Name)
+                switch (attributeProperty.Name)
                 {
                     case nameof(KeywordParameterAttribute.Position):
-                        position = (int)paramProperty.Value;
+                        position = (int)attributeProperty.Value;
                         break;
-
                     case nameof(KeywordParameterAttribute.Mandatory):
-                        mandatory = (bool)paramProperty.Value;
+                        mandatory = (bool)attributeProperty.Value;
                         break;
-
                     case nameof(KeywordParameterAttribute.ParameterSetName):
-                        parameterSet = (string)paramProperty.Value;
+                        parameterSet = (string)attributeProperty.Value;
                         break;
                 }
             }
-
-            var dkParameter = new DynamicKeywordParameter()
-            {
-                Name = parameterName,
-                TypeConstraint = parameterType,
-                Position = position,
-                Mandatory = mandatory,
-                ParameterSet = parameterSet,
-            };
-            TrySetMemberEnumType(dkParameter);
-            return dkParameter;
+            return new DynamicKeywordSetSpecificProperties(parameterSet, position, mandatory);
         }
 
         private DynamicKeywordProperty ReadPropertySpecification(TypeNameGenericContext genericContext, PropertyDefinition property, CustomAttribute keywordPropertyAttribute)
@@ -1298,19 +1498,27 @@ namespace System.Management.Automation.Language
             return dkProperty;
         }
 
-        private bool TrySetMemberEnumType(DynamicKeywordProperty keywordProperty)
+        private IEnumerable<string> TryGetEnumValues(string typeName)
         {
-            string propertyType = keywordProperty.TypeConstraint;
             foreach (var enumScope in _enumDefStack)
             {
-                if (enumScope.ContainsKey(propertyType))
+                if (enumScope.ContainsKey(typeName))
                 {
-                    keywordProperty.Values.AddRange(enumScope[propertyType]);
-                    return true;
+                    return enumScope[typeName];
                 }
             }
+            return null;
+        }
 
-            return false;
+        private bool TrySetMemberEnumType(DynamicKeywordProperty keywordProperty)
+        {
+            IEnumerable<string> values = TryGetEnumValues(keywordProperty.TypeConstraint);
+            if (values == null)
+            {
+                return false;
+            }
+            keywordProperty.Values.AddRange(values);
+            return true;
         }
 
         private bool IsAttributeOfType(CustomAttribute attribute, Type type)
@@ -1355,7 +1563,7 @@ namespace System.Management.Automation.Language
             var keywordValue = keywordAttribute.DecodeValue(TypeLookupProvider);
             bodyMode = DynamicKeywordBodyMode.Command;
             useMode = DynamicKeywordUseMode.OptionalMany;
-            defaultParamSet = null;
+            defaultParamSet = KeywordParameterAttribute.AllParameterSets;
 
             foreach (var attributeArgument in keywordValue.NamedArguments)
             {
@@ -1918,6 +2126,10 @@ namespace System.Management.Automation.Language
         /// </summary>
         public void Load()
         {
+            if (_topLevelKeywordsToLoad.Count < 1)
+            {
+                return;
+            }
             LoadModules();
             LoadKeywords();
         }

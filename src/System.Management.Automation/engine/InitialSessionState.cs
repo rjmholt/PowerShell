@@ -841,17 +841,16 @@ namespace System.Management.Automation.Runspaces
         /// <summary>
         /// Construct a DynamicKeyword entry around a DynamicKeyword data object
         /// </summary>
-        /// <param name="name"></param>
-        /// <param name="implementingType"></param>
-        public SessionStateDynamicKeywordEntry(DllDefinedDynamicKeyword keywordData) : base(keywordData.Keyword, SessionStateEntryVisibility.Public)
+        /// <param name="keywordInfo">keyword object information data</param>
+        public SessionStateDynamicKeywordEntry(KeywordInfo keywordInfo) : base(keywordInfo.Name, SessionStateEntryVisibility.Public)
         {
-            if (keywordData == null)
+            if (keywordInfo == null)
             {
-                throw PSTraceSource.NewArgumentNullException(nameof(keywordData));
+                throw PSTraceSource.NewArgumentNullException(nameof(keywordInfo));
             }
 
             CommandType = CommandTypes.DynamicKeyword;
-            KeywordData = keywordData;
+            KeywordInfo = keywordInfo;
         }
 
         /// <summary>
@@ -861,14 +860,14 @@ namespace System.Management.Automation.Runspaces
         {
             get
             {
-                return KeywordData.KeywordInfo?.DefiningType;
+                return KeywordInfo.ImplementingType;
             }
         }
         
         /// <summary>
         /// The DynamicKeyword data records most of the relevant information about the keyword in this entry
         /// </summary>
-        public DllDefinedDynamicKeyword KeywordData { get; private set; }
+        public KeywordInfo KeywordInfo { get; private set; }
 
         /// <summary>
         /// Create a shallow clone of the keyword entry
@@ -876,7 +875,7 @@ namespace System.Management.Automation.Runspaces
         /// <returns></returns>
         public override InitialSessionStateEntry Clone()
         {
-            return new SessionStateDynamicKeywordEntry(KeywordData);
+            return new SessionStateDynamicKeywordEntry(KeywordInfo);
         }
     }
 

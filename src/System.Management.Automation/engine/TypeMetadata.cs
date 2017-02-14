@@ -1509,7 +1509,7 @@ namespace System.Management.Automation
             {
                 // MemberInfo.GetCustomAttributes returns IEnumerable<Attribute> in CoreCLR
                 var attributes = member.GetCustomAttributes(typeof(ParameterAttribute), false);
-                if (attributes.Any())
+                if (attributes.Any() || member.GetCustomAttributes<KeywordParameterAttribute>().Any())
                 {
                     result = true;
                 }

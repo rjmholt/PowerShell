@@ -451,6 +451,13 @@ namespace System.Management.Automation
                 return;
             }
 
+            KeywordParameterAttribute kwParamAttr = attribute as KeywordParameterAttribute;
+            if (kwParamAttr != null)
+            {
+                ProcessParameterAttribute(memberName, kwParamAttr.AsParameterAttribute);
+                return;
+            }
+
             ValidateArgumentsAttribute validateAttr = attribute as ValidateArgumentsAttribute;
             if (validateAttr != null)
             {

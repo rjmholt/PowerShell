@@ -566,10 +566,31 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
+        /// Construct a fresh DynamicKeyword from commonly required data -- provides base(...) constructor
+        /// </summary>
+        /// <param name="name">keyword name -- the string representation of the keyword</param>
+        /// <param name="nameMode">the mode in which the keyword should be given a name</param>
+        /// <param name="bodyMode">the body type that the keyword uses</param>
+        /// <param name="useMode">the restrictions on the keyword's use within a scope</param>
+        /// <param name="isNested">whether the keyword belongs within the scope of another keyword or not</param>
+        public DynamicKeyword(string name,
+            DynamicKeywordNameMode nameMode,
+            DynamicKeywordBodyMode bodyMode,
+            DynamicKeywordUseMode useMode,
+            bool isNested)
+        {
+            Keyword = name;
+            NameMode = nameMode;
+            BodyMode = bodyMode;
+            UseMode = useMode;
+            IsNested = isNested;
+        }
+
+        /// <summary>
         /// Copy constructor for a DynamicKeyword
         /// </summary>
         /// <param name="other">the keyword to copy</param>
-        private DynamicKeyword(DynamicKeyword other)
+        protected DynamicKeyword(DynamicKeyword other)
         {
             ImplementingModule = other.ImplementingModule;
             ImplementingModuleVersion = other.ImplementingModuleVersion;
@@ -733,39 +754,38 @@ namespace System.Management.Automation.Language
     public class DllDefinedDynamicKeyword : DynamicKeyword
     {
         /// <summary>
-        /// Constructs a Dll-defined keyword from raw data
+        /// Constructs a DLL-defined keyword from raw data
         /// </summary>
-        /// <param name="name">the name of the keyword</param>
-        /// <param name="innerKeywords">keywords defined within this one</param>
-        /// <param name="parameters">parameters on this keyword</param>
-        /// <param name="properties">properties on this keyword</param>
-        /// <param name="bodyMode">the body mode of this keyword</param>
-        /// <param name="useMode">the use requirements of this keyword</param>
-        /// <param name="implementingModuleInfo">info on the module that defines this keyword</param>
+        /// <param name="name">the name of the keyword -- its string representation of the keyword</param>
+        /// <param name="implementingModuleInfo">the info data on the module from which the keyword was loaded</param>
+        /// <param name="bodyMode">the type of body the keyword uses</param>
+        /// <param name="useMode">the restrictions on how many times the keyword may be used within a scope</param>
+        /// <param name="defaultParameterSet">the default parameter set for keyword parameters</param>
+        /// <param name="innerKeywords">keywords that are only defined within the scope of this one</param>
+        /// <param name="parameters">parameters to this keyword</param>
+        /// <param name="properties">properties to this keyword -- should be empty unless the keyword has a hashtable body</param>
+        /// <param name="isNested">whether the keyword itself belongs within the scope of another DynamicKeyword</param>
         internal DllDefinedDynamicKeyword(string name,
-            IEnumerable<DynamicKeyword> innerKeywords,
-            IDictionary<string, IDictionary<string, DynamicKeywordParameter>> parameterSets,
-            IEnumerable<DynamicKeywordProperty> properties,
+            PSModuleInfo implementingModuleInfo,
             DynamicKeywordBodyMode bodyMode,
             DynamicKeywordUseMode useMode,
-            PSModuleInfo implementingModuleInfo)
+            string defaultParameterSet,
+            IEnumerable<DynamicKeyword> innerKeywords,
+            IEnumerable<DllKeywordParameter> parameters,
+            IEnumerable<DynamicKeywordProperty> properties,
+            bool isNested = false)
+            : base(name, DynamicKeywordNameMode.NoName, bodyMode, useMode, isNested)
         {
-            Keyword = name;
-            BodyMode = bodyMode;
-            UseMode = useMode;
             ImplementingModuleInfo = implementingModuleInfo;
+            DefaultParameterSet = defaultParameterSet;
 
             foreach (var innerKeyword in innerKeywords)
             {
                 InnerKeywords.Add(innerKeyword.Keyword, innerKeyword.Copy());
             }
-            foreach (KeyValuePair<string, IDictionary<string, DynamicKeywordParameter>> parameterSet in parameterSets)
+            foreach (var parameter in parameters)
             {
-                ParameterSets.Add(parameterSet.Key, new Dictionary<string, DynamicKeywordParameter>());
-                foreach (KeyValuePair<string, DynamicKeywordParameter> parameter in parameterSet.Value)
-                {
-                    ParameterSets[parameterSet.Key].Add(parameter.Key, new DynamicKeywordParameter(parameter.Value));
-                }
+                DllKeywordParameters.Add(parameter.Name, parameter);
             }
             foreach (var property in properties)
             {
@@ -782,40 +802,34 @@ namespace System.Management.Automation.Language
         /// Copy constructor
         /// </summary>
         /// <param name="other">the existing DllDefinedDynamicKeyword instance</param>
-        private DllDefinedDynamicKeyword(DllDefinedDynamicKeyword other)
+        protected DllDefinedDynamicKeyword(DllDefinedDynamicKeyword other) : base(other.Keyword, other.NameMode, other.BodyMode, other.UseMode, other.IsNested)
         {
             if (other.KeywordInfo != null)
             {
-                KeywordInfo = new KeywordInfo(other.KeywordInfo);
+                KeywordInfo = new Internal.KeywordInfo(other.KeywordInfo);
             }
 
+            DefaultParameterSet = other.DefaultParameterSet;
             ImplementingModuleInfo = other.ImplementingModuleInfo;
-            Keyword = other.Keyword;
-            ResourceName = other.ResourceName;
-            BodyMode = other.BodyMode;
-            UseMode = other.UseMode;
-            DirectCall = other.DirectCall;
-            NameMode = other.NameMode;
-            MetaStatement = other.MetaStatement;
-            IsReservedKeyword = other.IsReservedKeyword;
-            HasReservedProperties = other.HasReservedProperties;
-            IsNested = other.IsNested;
+
             foreach (KeyValuePair<string, DynamicKeywordProperty> entry in other.Properties)
             {
                 Properties.Add(entry.Key, new DynamicKeywordProperty(entry.Value));
             }
-            foreach (KeyValuePair<string, Dictionary<string, DynamicKeywordParameter>> parameterSet in other.ParameterSets)
+            foreach (KeyValuePair<string, DllKeywordParameter> entry in other.DllKeywordParameters)
             {
-                ParameterSets.Add(parameterSet.Key, new Dictionary<string, DynamicKeywordParameter>());
-                foreach (KeyValuePair<string, DynamicKeywordParameter> parameter in parameterSet.Value)
-                {
-                    ParameterSets[parameterSet.Key].Add(parameter.Key, new DynamicKeywordParameter(parameter.Value));
-                }
+                DllKeywordParameters.Add(entry.Key, entry.Value);
             }
             foreach (KeyValuePair<string, DynamicKeyword> entry in other.InnerKeywords)
             {
                 InnerKeywords.Add(entry.Key, entry.Value.Copy());
             }
+
+            ResourceName = other.ResourceName;
+            DirectCall = other.DirectCall;
+            MetaStatement = other.MetaStatement;
+            IsReservedKeyword = other.IsReservedKeyword;
+            HasReservedProperties = other.HasReservedProperties;
         }
 
         /// <summary>
@@ -830,7 +844,7 @@ namespace System.Management.Automation.Language
         /// <summary>
         /// Contains information about keyword runtime functionality
         /// </summary>
-        public KeywordInfo KeywordInfo { get; set; }
+        public Internal.KeywordInfo KeywordInfo { get; set; }
 
         /// <summary>
         /// Information about the module that implements this keyword
@@ -933,22 +947,9 @@ namespace System.Management.Automation.Language
         }
 
         /// <summary>
-        /// Parameters for this keyword, sorted into parameter sets
-        /// </summary>
-        public Dictionary<string, Dictionary<string, DynamicKeywordParameter>> ParameterSets
-        {
-            get
-            {
-                return _parameterSets ??
-                    (_parameterSets = new Dictionary<string, Dictionary<string, DynamicKeywordParameter>>(StringComparer.OrdinalIgnoreCase));
-            }
-        }
-        private Dictionary<string, Dictionary<string, DynamicKeywordParameter>> _parameterSets;
-
-        /// <summary>
-        /// Kludge to fulfil the contract of DynamicKeyword.Parameters without breaking the parent and any code
-        /// it might depend on. Rather than throwing an error, this will just provide a list of all parameters a
-        /// keyword might support.
+        /// Return a dictionary of all defined parameters on the keyword, but without any of the
+        /// set specific properties. This is designed to comply with the parent class' Parameters
+        /// property as much as possible
         /// </summary>
         public override Dictionary<string, DynamicKeywordParameter> Parameters
         {
@@ -957,22 +958,33 @@ namespace System.Management.Automation.Language
                 if (_parameters == null)
                 {
                     _parameters = new Dictionary<string, DynamicKeywordParameter>();
-                    foreach (var parameterSet in ParameterSets.Values)
+                    foreach (var parameter in DllKeywordParameters.Values)
                     {
-                        foreach (var parameter in parameterSet.Values)
-                        {
-                            if (!_parameters.ContainsKey(parameter.Name))
-                            {
-                                _parameters.Add(parameter.Name, parameter);
-                            }
-                        }
+                        _parameters.Add(parameter.Name, parameter.ToDynamicKeywordParameter());
                     }
                 }
-
                 return _parameters;
             }
         }
         private Dictionary<string, DynamicKeywordParameter> _parameters;
+
+        /// <summary>
+        /// The parameters to this keyword, with full set specific data
+        /// </summary>
+        public Dictionary<string, DllKeywordParameter> DllKeywordParameters
+        {
+            get
+            {
+                return _dllKeywordParameters ??
+                    (_dllKeywordParameters = new Dictionary<string, DllKeywordParameter>());
+            }
+        }
+        private Dictionary<string, DllKeywordParameter> _dllKeywordParameters;
+
+        /// <summary>
+        /// The default set of parameters to which parameters not explicitly given another set will belong
+        /// </summary>
+        public string DefaultParameterSet { get; }
     }
 
     internal static class DynamicKeywordExtension
@@ -1123,24 +1135,199 @@ namespace System.Management.Automation.Language
         public DynamicKeywordParameter(DynamicKeywordParameter other) : base (other)
         {
             Switch = other.Switch;
-            Position = other.Position;
         }
 
         /// <summary>
         /// Type if this is a switch parameter and takes no argument
         /// </summary>
         public bool Switch { get; set; }
+    }
+
+    /// <summary>
+    /// A DynamicKeyword parameter class that allows for parameter sets to be
+    /// employed. This has a direct correspondence to ParameterMetadata, but
+    /// without relying on loading a type
+    /// </summary>
+    public class DllKeywordParameter
+    {
+        /// <summary>
+        /// Construct a fresh DllKeywordParameter
+        /// </summary>
+        /// <param name="name">the name of the parameter</param>
+        /// <param name="typeConstraint">string representing the type of the parameter</param>
+        /// <param name="values">strings representing the values the parameter could take</param>
+        /// <param name="attributes">names of any attributes on the parameter</param>
+        /// <param name="setSpecificPropertyList">list of set specific properties the parameter has</param>
+        public DllKeywordParameter(string name,
+            string typeConstraint,
+            IEnumerable<string> values,
+            IEnumerable<string> attributes,
+            IEnumerable<DynamicKeywordSetSpecificProperties> setSpecificPropertyList)
+        {
+            Name = name;
+            TypeConstraint = typeConstraint;
+            foreach (var value in values)
+            {
+                Values.Add(value);
+            }
+            foreach (var attribute in attributes)
+            {
+                Attributes.Add(attribute);
+            }
+            foreach (var setSpecificProperties in setSpecificPropertyList)
+            {
+                SetSpecificProperties.Add(setSpecificProperties.SetName, setSpecificProperties);
+            }
+        }
 
         /// <summary>
-        /// What argument position this parameter takes if it is not specified
-        /// by name. A position of -1 indicates that it may be passed by name only
+        /// Copy constructor
         /// </summary>
-        public int Position { get; set; }
+        /// <param name="other"></param>
+        public DllKeywordParameter(DllKeywordParameter other)
+            : this(other.Name, other.TypeConstraint, other.Values, other.Attributes, other.SetSpecificProperties.Values)
+        {
+        }
 
         /// <summary>
-        /// The name of the set of parameters to which this parameter belongs
+        /// Clone this object
         /// </summary>
-        public string ParameterSet { get; set; }
+        /// <returns></returns>
+        public DllKeywordParameter Clone()
+        {
+            return new DllKeywordParameter(this);
+        }
+
+        /// <summary>
+        /// The name of the parameter
+        /// </summary>
+        public string Name { get; }
+
+        /// <summary>
+        /// String representation of the type of the keyword
+        /// </summary>
+        public string TypeConstraint { get; }
+
+        /// <summary>
+        /// Names of any attributes the parameter has
+        /// </summary>
+        public List<string> Attributes
+        {
+            get
+            {
+                return _attributes ??
+                    (_attributes = new List<string>());
+            }
+        }
+        private List<string> _attributes;
+
+        /// <summary>
+        /// Properties on the parameter that vary according to the parameter set
+        /// </summary>
+        public IDictionary<string, DynamicKeywordSetSpecificProperties> SetSpecificProperties
+        {
+            get
+            {
+                return _setSpecificProperties ??
+                    (_setSpecificProperties = new Dictionary<string, DynamicKeywordSetSpecificProperties>());
+            }
+        }
+        private IDictionary<string, DynamicKeywordSetSpecificProperties> _setSpecificProperties;
+
+        /// <summary>
+        /// Strings representing the possible values of the parameter, if the parameter is a small finite set
+        /// </summary>
+        public List<string> Values
+        {
+            get
+            {
+                return _values ??
+                    (_values = new List<string>());
+            }
+        }
+        private List<string> _values;
+
+        /// <summary>
+        /// The names of all the sets this parameter belongs to
+        /// </summary>
+        public List<string> ParameterSets
+        {
+            get
+            {
+                if (_parameterSets == null)
+                {
+                    _parameterSets = new List<string>(SetSpecificProperties.Keys);
+                }
+                return _parameterSets;
+            }
+        }
+        private List<string> _parameterSets;
+
+        /// <summary>
+        /// Turn this parameter into a less informative DynamicKeywordParameter object, with set-specific data left out
+        /// </summary>
+        /// <returns></returns>
+        public DynamicKeywordParameter ToDynamicKeywordParameter()
+        {
+            var dkParam = new DynamicKeywordParameter();
+            dkParam.Name = Name;
+            dkParam.TypeConstraint = TypeConstraint;
+            dkParam.Values.AddRange(Values);
+            dkParam.Attributes.AddRange(Attributes);
+            return dkParam;
+        }
+    }
+
+    /// <summary>
+    /// Parameter data that vary by set
+    /// </summary>
+    public class DynamicKeywordSetSpecificProperties
+    {
+        /// <summary>
+        /// Construct set specific properties from raw data
+        /// </summary>
+        /// <param name="setName"></param>
+        /// <param name="position"></param>
+        /// <param name="mandatory"></param>
+        public DynamicKeywordSetSpecificProperties(string setName, int position, bool mandatory)
+        {
+            SetName = setName;
+            Position = position;
+            Mandatory = mandatory;
+        }
+
+        /// <summary>
+        /// Copy constructor
+        /// </summary>
+        /// <param name="other"></param>
+        public DynamicKeywordSetSpecificProperties(DynamicKeywordSetSpecificProperties other)
+            : this(other.SetName, other.Position, other.Mandatory)
+        {
+        }
+
+        /// <summary>
+        /// Clone this object
+        /// </summary>
+        /// <returns></returns>
+        public DynamicKeywordSetSpecificProperties Clone()
+        {
+            return new DynamicKeywordSetSpecificProperties(this);
+        }
+
+        /// <summary>
+        /// The name of the set the properties belong to
+        /// </summary>
+        public string SetName { get; }
+        
+        /// <summary>
+        /// The position of the parameter
+        /// </summary>
+        public int Position { get; }
+
+        /// <summary>
+        /// Whether this parameter is mandatory or not
+        /// </summary>
+        public bool Mandatory { get; }
     }
 
     internal enum TokenizerMode

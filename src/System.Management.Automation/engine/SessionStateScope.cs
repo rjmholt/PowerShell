@@ -1913,9 +1913,10 @@ namespace System.Management.Automation
         }
 
         /// <summary>
-        /// 
+        /// Remove references to a dynamic keyword from this scope
         /// </summary>
-        /// <param name="keywordData"></param>
+        /// <param name="name">name of the keyword</param>
+        /// <param name="force">whether the removal should be forced</param>
         internal void RemoveDynamicKeywordEntry(string name, bool force = false)
         {
             Diagnostics.Assert(!String.IsNullOrEmpty(name), "The caller must verify the name");
@@ -1928,15 +1929,18 @@ namespace System.Management.Automation
 
         }
 
-        public Language.DynamicKeywordRuntimeContext DynamicKeywordRuntime
+        /// <summary>
+        /// The state handler for dynamic keyword execution
+        /// </summary>
+        public DynamicKeywordRuntimeContext DynamicKeywordRuntime
         {
             get
             {
                 return _dynamicKeywordRuntime ??
-                    (_dynamicKeywordRuntime = new Language.DynamicKeywordRuntimeContext());
+                    (_dynamicKeywordRuntime = new DynamicKeywordRuntimeContext());
             }
         }
-        private Language.DynamicKeywordRuntimeContext _dynamicKeywordRuntime;
+        private DynamicKeywordRuntimeContext _dynamicKeywordRuntime;
 
         #endregion
 

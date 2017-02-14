@@ -64,6 +64,18 @@ namespace System.Management.Automation
             this.CommandLineParameters = commandLineParameters;
         }
 
+        /// <summary>
+        /// Build a parameter binder for the given DynamicKeyword instance
+        /// </summary>
+        /// <param name="target">the object to bind parameter values to</param>
+        /// <param name="keyword">an instance of the keyword for context reference</param>
+        internal ReflectionParameterBinder(
+            object target,
+            Keyword keyword)
+            : base(target, keyword.MyInvocation, keyword.Context, keyword)
+        {
+        }
+
         #endregion ctor
 
         #region internal members
