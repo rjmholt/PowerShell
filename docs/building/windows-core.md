@@ -34,7 +34,7 @@ We use the [.NET Command Line Interface][dotnet-cli] (`dotnet`) to build PowerSh
 The `Start-PSBootstrap` function will automatically install it and add it to your path:
 
 ```powershell
-Import-Module ./build.psm1
+Import-Module .\build.psm1
 Start-PSBootstrap
 ```
 
@@ -42,7 +42,7 @@ The `Start-PSBootstrap` function itself does exactly this:
 
 ```powershell
 Invoke-WebRequest -Uri https://raw.githubusercontent.com/dotnet/cli/rel/1.0.0/scripts/obtain/dotnet-install.ps1 -OutFile install.ps1
-./install.ps1
+.\install.ps1
 ```
 
 If you have any problems installing `dotnet`, please see their [documentation][cli-docs].
@@ -53,16 +53,16 @@ If you have any problems installing `dotnet`, please see their [documentation][c
 Build using our module
 ======================
 
-We maintain a [PowerShell module](../../build.psm1) with the function `Start-PSBuild` to build PowerShell.
+We maintain a PowerShell module called ['build.psm1'](../../build.psm1) with the function `Start-PSBuild` to build PowerShell.
 
 ```powershell
-Import-Module ./build.psm1
+Import-Module .\build.psm1
 Start-PSBuild
 ```
 
-Congratulations! If everything went right, PowerShell is now built and executable as `./src/powershell-win-core/bin/Debug/netcoreapp1.0/win10-x64/powershell`.
+Congratulations! If everything went right, PowerShell is now built and executable as `.\src\powershell-win-core\bin\Debug\netcoreapp1.0\win10-x64\powershell`.
 
-This location is of the form `./[project]/bin/[configuration]/[framework]/[rid]/[binary name]`, 
+This location is of the form `.\[project]\bin\[configuration]\[framework]\[rid]\[binary name]`, 
 and our project is `powershell`, configuration is `Debug` by default, 
 framework is `netcoreapp1.1`, runtime identifier is **probably** `win10-x64` 
 (but will depend on your operating system; 

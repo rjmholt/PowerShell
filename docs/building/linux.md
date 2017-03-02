@@ -86,7 +86,7 @@ Please check your version and uninstall prior any prior versions.
 Build using our module
 ======================
 
-We maintain a [PowerShell module](../../build.psm1) with the function `Start-PSBuild` to build PowerShell. 
+We maintain a PowerShell module, ['build.psm1'](../../build.psm1), with the function `Start-PSBuild` to build PowerShell. 
 Since this is PowerShell code, it requires self-hosting. 
 If you have followed the toolchain setup section above, you should have `powershell` installed.
 
