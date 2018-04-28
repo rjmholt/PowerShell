@@ -4061,7 +4061,8 @@ namespace System.Management.Automation.Language
         /// <param name="expression">The pipeline generating values to iterate through.</param>
         /// <param name="body">The body to execute for each element written from pipeline.</param>
         /// <exception cref="PSArgumentNullException">
-        /// If <paramref name="extent"/>, <paramref name="expression"/>, or <paramref name="variable"/> is null.
+        /// If <paramref name="extent"/>, <paramref name="expression"/>, or <paramref name="variable"/> is null, or
+        /// if <paramref name="expression"/> is not assignable.
         /// </exception>
         public ForEachStatementAst(IScriptExtent extent,
                                    string label,
@@ -4069,16 +4070,8 @@ namespace System.Management.Automation.Language
                                    VariableExpressionAst variable,
                                    PipelineBaseAst expression,
                                    StatementBlockAst body)
-            : base(extent, label, expression, body)
+            : this(extent, label, flags, null, (ExpressionAst)variable, expression, body)
         {
-            if (expression == null || variable == null)
-            {
-                throw PSTraceSource.NewArgumentNullException(expression == null ? "expression" : "variablePath");
-            }
-
-            this.Flags = flags;
-            this.Variable = variable;
-            SetParent(variable);
         }
 
         /// <summary>
@@ -4103,19 +4096,66 @@ namespace System.Management.Automation.Language
                                    VariableExpressionAst variable,
                                    PipelineBaseAst expression,
                                    StatementBlockAst body)
-            : this(extent, label, flags, variable, expression, body)
+            : this(extent, label, flags, throttleLimit, (ExpressionAst)variable, expression, body)
         {
+        }
+
+        /// <summary>
+        /// Construct a foreach statement using an attributed variable
+        /// </summary>
+        /// <param name="extent">
+        /// The extent of the statement, starting from the optional label or the foreach keyword and ending at the closing curly brace.
+        /// </param>
+        /// <param name="label">Optionally null label.</param>
+        /// <param name="flags">Any flags affecting the way the foreach statement is processed.</param>
+        /// <param name="throttleLimit">The limit to be obeyed during parallel processing, if any.</param>
+        /// <param name="variable">The variable set on each iteration of the loop.</param>
+        /// <param name="expression">The pipeline generating values to iterate through.</param>
+        /// <param name="body">The body to execute for each element written in the pipeline.</param>
+        public ForEachStatementAst(IScriptExtent extent,
+                                   string label,
+                                   ForEachFlags flags,
+                                   ExpressionAst throttleLimit,
+                                   AttributedExpressionAst variable,
+                                   PipelineBaseAst expression,
+                                   StatementBlockAst body)
+            : this(extent, label, flags, throttleLimit, (ExpressionAst)variable, expression, body)
+        {
+            if (!(variable.GetActualAssignableAst() is VariableExpressionAst))
+            {
+                throw PSTraceSource.NewArgumentException(nameof(variable));
+            }
+        }
+
+        internal ForEachStatementAst(IScriptExtent extent,
+                                    string label,
+                                    ForEachFlags flags,
+                                    ExpressionAst throttleLimit,
+                                    ExpressionAst variable,
+                                    PipelineBaseAst expression,
+                                    StatementBlockAst body)
+            : base(extent, label, expression, body)
+        {
+            if (expression == null || variable == null)
+            {
+                throw PSTraceSource.NewArgumentNullException(expression == null ? nameof(expression) : nameof(variable));
+            }
+
             this.ThrottleLimit = throttleLimit;
             if (throttleLimit != null)
             {
                 SetParent(throttleLimit);
             }
+
+            this.Flags = flags;
+            this.Variable = variable;
+            SetParent(variable);
         }
 
         /// <summary>
         /// The name of the variable set for each item as the loop iterates.  This property is never null.
         /// </summary>
-        public VariableExpressionAst Variable { get; private set; }
+        public ExpressionAst Variable { get; private set; }
 
         /// <summary>
         /// The limit to be obeyed during parallel processing, if any.
@@ -4143,7 +4183,7 @@ namespace System.Management.Automation.Language
                                                newVariable, newExpression, newBody);
             }
 
-            return new ForEachStatementAst(this.Extent, this.Label, this.Flags, newVariable, newExpression, newBody);
+            return new ForEachStatementAst(this.Extent, this.Label, this.Flags, null, newVariable, newExpression, newBody);
         }
 
         #region Visitors
@@ -7290,7 +7330,7 @@ namespace System.Management.Automation.Language
 
         #region Code Generation Details
 
-        private ISupportsAssignment GetActualAssignableAst()
+        internal ISupportsAssignment GetActualAssignableAst()
         {
             ExpressionAst child = this;
             var childAttributeAst = child as AttributedExpressionAst;

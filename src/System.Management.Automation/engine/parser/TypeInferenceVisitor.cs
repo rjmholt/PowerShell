@@ -1615,8 +1615,18 @@ namespace System.Management.Automation
             var foreachAst = ast as ForEachStatementAst;
             if (foreachAst != null)
             {
+                VariablePath variablePath;
+                if (foreachAst.Variable is AttributedExpressionAst attributedVariable)
+                {
+                    variablePath = ((VariableExpressionAst)attributedVariable.GetActualAssignableAst()).VariablePath;
+                }
+                else
+                {
+                    variablePath = ((VariableExpressionAst)foreachAst.Variable).VariablePath;
+                }
+
                 return variableAstVariablePath.IsUnscopedVariable &&
-                       foreachAst.Variable.VariablePath.UnqualifiedPath.Equals(variableAstVariablePath.UnqualifiedPath, StringComparison.OrdinalIgnoreCase);
+                       variablePath.UnqualifiedPath.Equals(variableAstVariablePath.UnqualifiedPath, StringComparison.OrdinalIgnoreCase);
             }
 
             var commandAst = ast as CommandAst;

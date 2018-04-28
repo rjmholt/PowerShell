@@ -3284,6 +3284,19 @@ namespace System.Management.Automation.Language
             SkipNewlines();
 
             Token token = NextToken();
+
+            // We might be looking at something like [attr][type]$var
+            List<AttributeBaseAst> attributes = null;
+            if (token.Kind == TokenKind.Generic && token.Text[0] == '[')
+            {
+                // Go back and re-parse as an attribute list
+                Resync(token);
+                attributes = AttributeListRule(inExpressionMode: false);
+
+                // Now get the variable itself
+                token = NextToken();
+            }
+
             if (token.Kind != TokenKind.Variable && token.Kind != TokenKind.SplattedVariable)
             {
                 // ErrorRecovery: assume the rest of the statement is missing.
@@ -3296,7 +3309,30 @@ namespace System.Management.Automation.Language
                 return new ErrorStatementAst(ExtentOf(startOfStatement, endErrorStatement));
             }
 
-            var variableAst = new VariableExpressionAst((VariableToken)token);
+            ExpressionAst variableAst = new VariableExpressionAst((VariableToken)token);
+
+            // If we were given any attributes, roll them up into a new Ast with the variable
+            if (attributes != null && attributes.Count > 0)
+            {
+                for (int i = attributes.Count-1; i >= 0; i--)
+                {
+                    if (attributes[i] is TypeConstraintAst typeConstraintAst)
+                    {
+                        variableAst = new ConvertExpressionAst(
+                            ExtentOf(typeConstraintAst, variableAst),
+                            typeConstraintAst,
+                            variableAst);
+                    }
+                    else
+                    {
+                        variableAst = new AttributedExpressionAst(
+                            ExtentOf(attributes[i], variableAst),
+                            attributes[i],
+                            variableAst);
+                    }
+                }
+            }
+
             SkipNewlines();
 
             PipelineBaseAst pipeline = null;
