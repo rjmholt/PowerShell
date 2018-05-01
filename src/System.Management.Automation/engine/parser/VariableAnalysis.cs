@@ -822,11 +822,11 @@ namespace System.Management.Automation.Language
 
         private void CheckLHSAssign(ExpressionAst lhs, BitArray assignedBitArray)
         {
-            var convertExpr = lhs as ConvertExpressionAst;
+            var convertExpr = lhs as AttributedExpressionAst;
             Type convertType = null;
             if (convertExpr != null)
             {
-                lhs = convertExpr.Child;
+                lhs = convertExpr.GetActualAssignableAst() as ExpressionAst;
                 convertType = convertExpr.StaticType;
             }
 
