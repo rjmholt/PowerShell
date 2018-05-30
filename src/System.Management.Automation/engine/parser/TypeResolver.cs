@@ -733,6 +733,8 @@ namespace System.Management.Automation
                     { typeof(decimal),                                     new[] { "decimal" } },
                     { typeof(double),                                      new[] { "double" } },
                     { typeof(DscResourceAttribute),                        new[] { "DscResource"} },
+                    { typeof(DslKeywordAttribute),                         new[] { "DslKeyword" } },
+                    { typeof(DslKeywordBodyKind),                          new[] { "dslbody" } },
                     { typeof(float),                                       new[] { "float", "single" } },
                     { typeof(Guid),                                        new[] { "guid" } },
                     { typeof(Hashtable),                                   new[] { "hashtable" } },
