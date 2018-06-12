@@ -590,16 +590,14 @@ namespace System.Management.Automation
     /// </summary>
     public class DslKeywordAttribute : ParsingBaseAttribute
     {
-        private readonly DslKeywordBodyKind _bodyKind;
+    }
 
-        /// <summary>
-        /// Create a DSL Keyword Attribute.
-        /// </summary>
-        /// <param name="bodyKind">The kind of body the annotated keyword definition should take.</param>
-        public DslKeywordAttribute(DslKeywordBodyKind bodyKind)
-        {
-            _bodyKind = bodyKind;
-        }
+    /// <summary>
+    /// Denotes an argument intended to be used as the body of a keyword function.
+    /// To be used with DslKeywordAttribute.
+    /// </summary>
+    public class DslBodyAttribute : ParsingBaseAttribute
+    {
     }
 
     #endregion Misc Attributes

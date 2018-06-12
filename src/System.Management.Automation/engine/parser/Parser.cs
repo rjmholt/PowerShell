@@ -42,6 +42,8 @@ namespace System.Management.Automation.Language
         private bool _inConfiguration;
         private ParseMode _parseMode;
 
+        private readonly IDictionary<string, DslKeywordBodyKind> _dslKeywords;
+
         //private bool _v3FeatureUsed;
         internal string _fileName;
         internal bool ProduceV2Tokens { get; set; }
@@ -54,6 +56,7 @@ namespace System.Management.Automation.Language
             _tokenizer = new Tokenizer(this);
             ErrorList = new List<ParseError>();
             _fileName = null;
+            _dslKeywords = new Dictionary<string, DslKeywordBodyKind>();
         }
 
         /// <summary>
@@ -5150,6 +5153,43 @@ namespace System.Management.Automation.Language
 
                 FunctionDefinitionAst result = new FunctionDefinitionAst(ExtentOf(functionToken, scriptBlock),
                     isFilter, isWorkflow, functionNameToken, parameters, scriptBlock);
+
+                // Check for a body variable on DSL keywords
+                if (result.IsDslKeyword)
+                {
+                    bool sawBodyParameter = false;
+                    foreach (ParameterAst parameter in result.Body.ParamBlock.Parameters)
+                    {
+                        if (!parameter.Attributes.Any(attr => attr.TypeName.FullName == typeof(DslBodyAttribute).FullName))
+                        {
+                            continue;
+                        }
+
+                        sawBodyParameter = true;
+                        TypeConstraintAst bodyTypeConstraint = parameter.Attributes.OfType<TypeConstraintAst>().FirstOrDefault();
+
+                        if (bodyTypeConstraint.TypeName.FullName == typeof(Hashtable).FullName)
+                        {
+                            _dslKeywords.Add(result.Name, DslKeywordBodyKind.HashTable);
+                        }
+                        else if (bodyTypeConstraint.TypeName.FullName == typeof(ScriptBlock).FullName)
+                        {
+                            _dslKeywords.Add(result.Name, DslKeywordBodyKind.ScriptBlock);
+                        }
+                        else
+                        {
+                            
+                        }
+
+                        break;
+                    }
+
+                    if (!sawBodyParameter)
+                    {
+                        _dslKeywords.Add(result.Name, DslKeywordBodyKind.Command);
+                    }
+                }
+
                 return result;
             }
             finally

@@ -3530,6 +3530,17 @@ namespace System.Management.Automation.Language
         public string Name { get; private set; }
 
         /// <summary>
+        /// If true, this function declaration declares a DSL keyword
+        /// </summary>
+        public bool IsDslKeyword
+        {
+            get
+            {
+                return Body.Attributes.Any(attr => attr.TypeName.Equals(nameof(DslKeywordAttribute)));
+            }
+        }
+
+        /// <summary>
         /// The parameters specified immediately after the function name, or null if no parameters were specified.
         /// <para>It is possible that this property may have a value and <see cref="ScriptBlockAst.ParamBlock"/> to also have a
         /// value.  Normally this is not allowed in a valid script, but in one rare case it is allowed:</para>
