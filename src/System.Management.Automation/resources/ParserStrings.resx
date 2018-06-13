@@ -1461,6 +1461,12 @@ ModuleVersion : Version of module to import. If used, ModuleName must represent 
   <data name="PsDscRunAsCredentialMergeErrorForCompositeResources" xml:space="preserve">
     <value>Conflict in using PsDscRunAsCredential for Resource {0} because it already specifies PsDscRunAsCredential value. We can only use one PsDscRunAsCredential for the composite resource. </value>
   </data>
+  <data name="UnconstrainedDslBodyType" xml:space="preserve">
+    <value>DSL keyword definitions must use a supported type constraint on bodies</value>
+  </data>
+  <data name="UnsupportedDslBodyType" xml:space="preserve">
+    <value>DSL keyword bodies of type '{0}' are not supported</value>
+  </data>
   <data name="ParserError" xml:space="preserve">
     <value>{0}</value>
   </data>

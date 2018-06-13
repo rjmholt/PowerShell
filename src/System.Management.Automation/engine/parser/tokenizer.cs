@@ -3177,6 +3177,12 @@ namespace System.Management.Automation.Language
             {
                 return NewToken(TokenKind.DynamicKeyword);
             }
+            
+            if (DslKeyword.IsDefined(str))
+            {
+                return NewToken(TokenKind.DslKeyword);
+            }
+
             return NewGenericToken(str);
         }
 
@@ -3804,6 +3810,10 @@ namespace System.Management.Automation.Language
                 if (DynamicKeyword.ContainsKeyword(ident) && !DynamicKeyword.IsHiddenKeyword(ident))
                 {
                     return NewToken(TokenKind.DynamicKeyword);
+                }
+                if (DslKeyword.IsDefined(ident))
+                {
+                    return NewToken(TokenKind.DslKeyword);
                 }
             }
 

@@ -42,7 +42,7 @@ namespace System.Management.Automation.Language
         private bool _inConfiguration;
         private ParseMode _parseMode;
 
-        private readonly IDictionary<string, DslKeywordBodyKind> _dslKeywords;
+        private readonly DslKeywordTable _dslKeywords;
 
         //private bool _v3FeatureUsed;
         internal string _fileName;
@@ -56,7 +56,7 @@ namespace System.Management.Automation.Language
             _tokenizer = new Tokenizer(this);
             ErrorList = new List<ParseError>();
             _fileName = null;
-            _dslKeywords = new Dictionary<string, DslKeywordBodyKind>();
+            _dslKeywords = new DslKeywordTable();
         }
 
         /// <summary>
@@ -169,6 +169,10 @@ namespace System.Management.Automation.Language
             finally
             {
                 errors = ErrorList.ToArray();
+                if (!errors.Any())
+                {
+                    DslKeyword.AddKeywords(_dslKeywords.GetKeywords());
+                }
             }
         }
 
@@ -5052,7 +5056,7 @@ namespace System.Management.Automation.Language
                 SetTokenizerMode(TokenizerMode.Command);
                 ScriptBlockAst scriptBlock = ScriptBlockRule(lCurly, false, baseCtorCallStatement);
                 var result = new FunctionDefinitionAst(ExtentOf(functionNameToken, scriptBlock),
-                    /*isFilter:*/false, /*isWorkflow:*/false, functionNameToken, parameters, scriptBlock);
+                    /*isFilter:*/false, /*isWorkflow:*/false, /*isDslKeyword*/false, functionNameToken, parameters, scriptBlock);
 
                 return result;
             }
@@ -5151,43 +5155,17 @@ namespace System.Management.Automation.Language
                                        ? ((StringToken)functionNameToken).Value
                                        : functionNameToken.Text;
 
+                AttributeAst dslAttrAst = scriptBlock.ParamBlock?.Attributes?
+                    .FirstOrDefault(attr => attr.TypeName.FullName.Equals("DslKeyword", StringComparison.OrdinalIgnoreCase));
+
+                bool isDslKeyword = dslAttrAst != null;
                 FunctionDefinitionAst result = new FunctionDefinitionAst(ExtentOf(functionToken, scriptBlock),
-                    isFilter, isWorkflow, functionNameToken, parameters, scriptBlock);
+                    isFilter, isWorkflow, isDslKeyword, functionNameToken, parameters, scriptBlock);
 
                 // Check for a body variable on DSL keywords
                 if (result.IsDslKeyword)
                 {
-                    bool sawBodyParameter = false;
-                    foreach (ParameterAst parameter in result.Body.ParamBlock.Parameters)
-                    {
-                        if (!parameter.Attributes.Any(attr => attr.TypeName.FullName == typeof(DslBodyAttribute).FullName))
-                        {
-                            continue;
-                        }
-
-                        sawBodyParameter = true;
-                        TypeConstraintAst bodyTypeConstraint = parameter.Attributes.OfType<TypeConstraintAst>().FirstOrDefault();
-
-                        if (bodyTypeConstraint.TypeName.FullName == typeof(Hashtable).FullName)
-                        {
-                            _dslKeywords.Add(result.Name, DslKeywordBodyKind.HashTable);
-                        }
-                        else if (bodyTypeConstraint.TypeName.FullName == typeof(ScriptBlock).FullName)
-                        {
-                            _dslKeywords.Add(result.Name, DslKeywordBodyKind.ScriptBlock);
-                        }
-                        else
-                        {
-                            
-                        }
-
-                        break;
-                    }
-
-                    if (!sawBodyParameter)
-                    {
-                        _dslKeywords.Add(result.Name, DslKeywordBodyKind.Command);
-                    }
+                    return ParseDslKeywordDefinition(result);
                 }
 
                 return result;
@@ -5196,6 +5174,70 @@ namespace System.Management.Automation.Language
             {
                 _tokenizer.InWorkflowContext = oldTokenizerWorkflowContext;
             }
+        }
+
+        private StatementAst ParseDslKeywordDefinition(FunctionDefinitionAst functionDefinition)
+        {
+            ParameterAst bodyParameter = null;
+            foreach (ParameterAst parameter in functionDefinition.Body.ParamBlock.Parameters)
+            {
+                if (!parameter.Attributes.Any(attr => attr.TypeName.FullName.Equals("DslBody", StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                bodyParameter = parameter;
+                break;
+            }
+
+            if (bodyParameter == null)
+            {
+                _dslKeywords.AddKeyword(new DslKeyword(functionDefinition.Name, DslKeywordBodyKind.Command));
+                return functionDefinition;
+            }
+
+            TypeConstraintAst bodyType = bodyParameter.Attributes
+                .OfType<TypeConstraintAst>()
+                .FirstOrDefault();
+
+            if (bodyType == null)
+            {
+                ReportError(
+                    bodyParameter.Extent,
+                    nameof(ParserStrings.UnconstrainedDslBodyType),
+                    ParserStrings.UnconstrainedDslBodyType);
+                return new ErrorStatementAst(functionDefinition.Extent);
+            }
+
+            if (bodyType.TypeName.FullName.Equals("scriptblock", StringComparison.OrdinalIgnoreCase))
+            {
+                _dslKeywords.AddKeyword(new DslKeyword(functionDefinition.Name, DslKeywordBodyKind.ScriptBlock));
+                return functionDefinition;
+            }
+
+            if (bodyType.TypeName.FullName.Equals("hashtable", StringComparison.OrdinalIgnoreCase))
+            {
+                _dslKeywords.AddKeyword(new DslKeyword(functionDefinition.Name, DslKeywordBodyKind.HashTable));
+                return functionDefinition;
+            }
+
+            // Getting here means the body type is given but not supported
+            ReportError(
+                bodyType.Extent,
+                nameof(ParserStrings.UnsupportedDslBodyType),
+                ParserStrings.UnsupportedDslBodyType,
+                bodyType.TypeName.FullName);
+            return new ErrorStatementAst(functionDefinition.Extent);
+        }
+
+        private bool TryLookupDslKeyword(string name, out DslKeyword keyword)
+        {
+            return _dslKeywords.TryGetKeyword(name, out keyword) || DslKeyword.TryGetKeyword(name, out keyword);
+        }
+        
+        private bool IsNameDefinedAsKeyword(string name)
+        {
+            return _dslKeywords.ContainsKeyword(name) || DslKeyword.IsDefined(name);
         }
 
         private List<ParameterAst> FunctionParameterDeclarationRule(out IScriptExtent endErrorStatement, out Token rParen)
@@ -5964,7 +6006,10 @@ namespace System.Management.Automation.Language
                         exprAst = new StringConstantExpressionAst(token.Extent, token.Text, StringConstantType.BareWord);
 
                         // A command/argument that matches a keyword isn't really a keyword, so don't color it that way
-                        token.TokenFlags &= ~TokenFlags.Keyword;
+                        if (!DynamicKeyword.ContainsKeyword(token.Text) && !DslKeyword.IsDefined(token.Text))
+                        {
+                            token.TokenFlags &= ~TokenFlags.Keyword;
+                        }
 
                         switch (context)
                         {
@@ -6086,15 +6131,37 @@ namespace System.Management.Automation.Language
                 }
 
                 bool scanning = true;
+                bool shouldHangLineForKeyword = false;
                 while (scanning)
                 {
+                    if (shouldHangLineForKeyword)
+                    {
+                        switch (token.Kind)
+                        {
+                            case TokenKind.NewLine:
+                                UngetToken(token);
+                                SkipNewlines();
+                                token = NextToken();
+                                shouldHangLineForKeyword = false;
+                                break;
+
+                            case TokenKind.EndOfInput:
+                                ReportIncompleteInput(endExtent,
+                                    nameof(ParserStrings.ExpectedValueExpression),
+                                    ParserStrings.ExpectedValueExpression,
+                                    token.Text);
+                                shouldHangLineForKeyword = false;
+                                break;
+                        }
+                    }
+
                     switch (token.Kind)
                     {
+                        case TokenKind.EndOfInput:
+                        case TokenKind.NewLine:
                         case TokenKind.Pipe:
                         case TokenKind.RCurly:
                         case TokenKind.RParen:
-                        case TokenKind.EndOfInput:
-                        case TokenKind.NewLine:
                         case TokenKind.Semi:
                         case TokenKind.AndAnd:
                         case TokenKind.OrOr:
@@ -6195,6 +6262,15 @@ namespace System.Management.Automation.Language
                             else
                             {
                                 var ast = GetCommandArgument(context, token);
+
+                                if (context == CommandArgumentContext.CommandName)
+                                {
+                                    string commandName = (string)ast.SafeGetValue();
+                                    if (TryLookupDslKeyword(commandName, out DslKeyword dslKeyword))
+                                    {
+                                        shouldHangLineForKeyword = dslKeyword.Kind != DslKeywordBodyKind.Command;
+                                    }
+                                }
 
                                 // If this is the special verbatim argument syntax, look for the next element
                                 StringToken argumentToken = token as StringToken;

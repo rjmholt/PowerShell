@@ -3453,6 +3453,7 @@ namespace System.Management.Automation.Language
         /// </param>
         /// <param name="isFilter">True if the filter keyword was used.</param>
         /// <param name="isWorkflow">True if the workflow keyword was used.</param>
+        /// <param name="isDslKeyword">True if this function definition represents a DSL keyword definition.</param>
         /// <param name="name">The name of the function.</param>
         /// <param name="parameters">
         /// The parameters specified after the function name.  This does not include parameters specified with a param statement.
@@ -3465,6 +3466,7 @@ namespace System.Management.Automation.Language
         public FunctionDefinitionAst(IScriptExtent extent,
                                      bool isFilter,
                                      bool isWorkflow,
+                                     bool isDslKeyword,
                                      string name,
                                      IEnumerable<ParameterAst> parameters,
                                      ScriptBlockAst body)
@@ -3487,6 +3489,7 @@ namespace System.Management.Automation.Language
 
             this.IsFilter = isFilter;
             this.IsWorkflow = isWorkflow;
+            this.IsDslKeyword = isDslKeyword;
 
             this.Name = name;
             if (parameters != null && parameters.Any())
@@ -3501,12 +3504,14 @@ namespace System.Management.Automation.Language
         internal FunctionDefinitionAst(IScriptExtent extent,
                                        bool isFilter,
                                        bool isWorkflow,
+                                       bool isDslKeyword,
                                        Token functionNameToken,
                                        IEnumerable<ParameterAst> parameters,
                                        ScriptBlockAst body)
             : this(extent,
                    isFilter,
                    isWorkflow,
+                   isDslKeyword,
                    (functionNameToken.Kind == TokenKind.Generic) ? ((StringToken)functionNameToken).Value : functionNameToken.Text,
                    parameters,
                    body)
@@ -3532,13 +3537,7 @@ namespace System.Management.Automation.Language
         /// <summary>
         /// If true, this function declaration declares a DSL keyword
         /// </summary>
-        public bool IsDslKeyword
-        {
-            get
-            {
-                return Body.Attributes.Any(attr => attr.TypeName.Equals(nameof(DslKeywordAttribute)));
-            }
-        }
+        public bool IsDslKeyword { get; private set; }
 
         /// <summary>
         /// The parameters specified immediately after the function name, or null if no parameters were specified.
@@ -3605,7 +3604,7 @@ namespace System.Management.Automation.Language
             var newParameters = CopyElements(this.Parameters);
             var newBody = CopyElement(this.Body);
 
-            return new FunctionDefinitionAst(this.Extent, this.IsFilter, this.IsWorkflow, this.Name, newParameters, newBody) { NameExtent = this.NameExtent };
+            return new FunctionDefinitionAst(this.Extent, this.IsFilter, this.IsWorkflow, this.IsDslKeyword, this.Name, newParameters, newBody) { NameExtent = this.NameExtent };
         }
 
         internal string GetParamTextFromParameterList(Tuple<List<VariableExpressionAst>, string> usingVariablesTuple = null)

@@ -565,27 +565,6 @@ namespace System.Management.Automation
     }
 
     /// <summary>
-    /// The kinds of body a DSL keyword can take
-    /// </summary>
-    public enum DslKeywordBodyKind
-    {
-        /// <summary>
-        /// Keyword takes no body, only parameters: Keyword -Param1 Something -Switch Param PositionalParam
-        /// </summary>
-        Command,
-
-        /// <summary>
-        /// Keyword uses a scriptblock body: Keyword { foreach ($i in 1..10) { $i }; Write-Output "Hello" }
-        /// </summary>
-        ScriptBlock,
-
-        /// <summary>
-        /// Keyword uses a key/value body: Keyword { key = value; key2 = value2 }
-        /// </summary>
-        HashTable
-    }
-
-    /// <summary>
     /// Denotes a function intended for usage as a PowerShell DSL keyword
     /// </summary>
     public class DslKeywordAttribute : ParsingBaseAttribute
