@@ -45,7 +45,7 @@ namespace Microsoft.PowerShell.Commands
         {
             if (string.IsNullOrEmpty(moduleName))
             {
-                throw new ArgumentNullException("moduleName");
+                throw new ArgumentNullException(nameof(moduleName));
             }
             this.Name = moduleName;
             // Alias name of miniumVersion
@@ -67,7 +67,7 @@ namespace Microsoft.PowerShell.Commands
         {
             if (moduleSpecification == null)
             {
-                throw new ArgumentNullException("moduleSpecification");
+                throw new ArgumentNullException(nameof(moduleSpecification));
             }
 
             var exception = ModuleSpecificationInitHelper(this, moduleSpecification);
@@ -91,31 +91,35 @@ namespace Microsoft.PowerShell.Commands
             {
                 foreach (DictionaryEntry entry in hashtable)
                 {
-                    if (entry.Key.ToString().Equals("ModuleName", StringComparison.OrdinalIgnoreCase))
+                    string field = entry.Key.ToString();
+
+                    if (field.Equals("ModuleName", StringComparison.OrdinalIgnoreCase))
                     {
                         moduleSpecification.Name = LanguagePrimitives.ConvertTo<string>(entry.Value);
                     }
-                    else if (entry.Key.ToString().Equals("ModuleVersion", StringComparison.OrdinalIgnoreCase))
+                    else if (field.Equals("ModuleVersion", StringComparison.OrdinalIgnoreCase))
                     {
                         moduleSpecification.Version = LanguagePrimitives.ConvertTo<Version>(entry.Value);
                     }
-                    else if (entry.Key.ToString().Equals("RequiredVersion", StringComparison.OrdinalIgnoreCase))
+                    else if (field.Equals("RequiredVersion", StringComparison.OrdinalIgnoreCase))
                     {
                         moduleSpecification.RequiredVersion = LanguagePrimitives.ConvertTo<Version>(entry.Value);
                     }
-                    else if (entry.Key.ToString().Equals("MaximumVersion", StringComparison.OrdinalIgnoreCase))
+                    else if (field.Equals("MaximumVersion", StringComparison.OrdinalIgnoreCase))
                     {
                         moduleSpecification.MaximumVersion = LanguagePrimitives.ConvertTo<String>(entry.Value);
                         ModuleCmdletBase.GetMaximumVersion(moduleSpecification.MaximumVersion);
                     }
-                    else if (entry.Key.ToString().Equals("GUID", StringComparison.OrdinalIgnoreCase))
+                    else if (field.Equals("GUID", StringComparison.OrdinalIgnoreCase))
                     {
                         moduleSpecification.Guid = LanguagePrimitives.ConvertTo<Guid?>(entry.Value);
                     }
                     else
                     {
                         if (badKeys.Length > 0)
+                        {
                             badKeys.Append(", ");
+                        }
                         badKeys.Append("'");
                         badKeys.Append(entry.Key.ToString());
                         badKeys.Append("'");
@@ -166,7 +170,7 @@ namespace Microsoft.PowerShell.Commands
         {
             if (moduleInfo == null)
             {
-                throw new ArgumentNullException("moduleInfo");
+                throw new ArgumentNullException(nameof(moduleInfo));
             }
 
             this.Name = moduleInfo.Name;
@@ -182,36 +186,40 @@ namespace Microsoft.PowerShell.Commands
         /// <returns></returns>
         public override string ToString()
         {
-            string moduleSpecString = string.Empty;
             if (Guid == null && Version == null && RequiredVersion == null && MaximumVersion == null)
             {
-                moduleSpecString = Name;
+                return Name;
+            }
+
+            var moduleSpecBuilder = new StringBuilder()
+                .Append("@{ ModuleName = '")
+                .Append(Name)
+                .Append("'");
+
+            if (Guid != null)
+            {
+                moduleSpecBuilder.Append("; Guid = '{").Append(Guid).Append("}' ");
+            }
+
+            if (RequiredVersion != null)
+            {
+                moduleSpecBuilder.Append("; RequiredVersion = '").Append(RequiredVersion).Append("'");
             }
             else
             {
-                moduleSpecString = "@{ ModuleName = '" + Name + "'";
-                if (Guid != null)
+                if (Version != null)
                 {
-                    moduleSpecString += "; Guid = '{" + Guid + "}' ";
+                    moduleSpecBuilder.Append("; ModuleVersion = '").Append(Version).Append("'");
                 }
-                if (RequiredVersion != null)
+                if (MaximumVersion != null)
                 {
-                    moduleSpecString += "; RequiredVersion = '" + RequiredVersion + "'";
+                    moduleSpecBuilder.Append("; MaximumVersion = '").Append(MaximumVersion).Append("'");
                 }
-                else
-                {
-                    if (Version != null)
-                    {
-                        moduleSpecString += "; ModuleVersion = '" + Version + "'";
-                    }
-                    if (MaximumVersion != null)
-                    {
-                        moduleSpecString += "; MaximumVersion = '" + MaximumVersion + "'";
-                    }
-                }
-                moduleSpecString += " }";
             }
-            return moduleSpecString;
+
+            moduleSpecBuilder.Append(" }");
+
+            return moduleSpecBuilder.ToString();
         }
 
         /// <summary>
@@ -270,61 +278,17 @@ namespace Microsoft.PowerShell.Commands
     {
         public bool Equals(ModuleSpecification x, ModuleSpecification y)
         {
-            bool result = false;
-
             if (x == null && y == null)
             {
-                result = true;
-            }
-            else if (x != null && y != null)
-            {
-                if (x.Name != null && y.Name != null)
-                {
-                    result = x.Name.Equals(y.Name, StringComparison.OrdinalIgnoreCase);
-                }
-                else
-                {
-                    result = true;
-                }
-                if (result)
-                {
-                    if (x.Guid.HasValue && y.Guid.HasValue)
-                    {
-                        result = x.Guid.Equals(y.Guid);
-                    }
-                }
-                if (result)
-                {
-                    if (x.Version != null && y.Version != null)
-                    {
-                        result = x.Version.Equals(y.Version);
-                    }
-                    else if (x.Version != null || y.Version != null)
-                    {
-                        result = false;
-                    }
-
-                    if (x.MaximumVersion != null && y.MaximumVersion != null)
-                    {
-                        result = x.MaximumVersion.Equals(y.MaximumVersion);
-                    }
-                    else if (x.MaximumVersion != null || y.MaximumVersion != null)
-                    {
-                        result = false;
-                    }
-
-                    if (result && x.RequiredVersion != null && y.RequiredVersion != null)
-                    {
-                        result = x.RequiredVersion.Equals(y.RequiredVersion);
-                    }
-                    else if (result && (x.RequiredVersion != null || y.RequiredVersion != null))
-                    {
-                        result = false;
-                    }
-                }
+                return true;
             }
 
-            return result;
+            return x != null && y != null
+                && String.Equals(x.Name, y.Name, StringComparison.OrdinalIgnoreCase)
+                && Guid.Equals(x.Guid, y.Guid)
+                && Version.Equals(x.Version, y.Version)
+                && String.Equals(x.MaximumVersion, y.MaximumVersion)
+                && Version.Equals(x.RequiredVersion, y.RequiredVersion);
         }
 
         public int GetHashCode(ModuleSpecification obj)
@@ -333,25 +297,12 @@ namespace Microsoft.PowerShell.Commands
 
             if (obj != null)
             {
-                if (obj.Name != null)
+                foreach (object property in new object[] { obj.Name, obj.Guid, obj.Version, obj.MaximumVersion, obj.RequiredVersion })
                 {
-                    result = result ^ obj.Name.GetHashCode();
-                }
-                if (obj.Guid.HasValue)
-                {
-                    result = result ^ obj.Guid.GetHashCode();
-                }
-                if (obj.Version != null)
-                {
-                    result = result ^ obj.Version.GetHashCode();
-                }
-                if (obj.MaximumVersion != null)
-                {
-                    result = result ^ obj.MaximumVersion.GetHashCode();
-                }
-                if (obj.RequiredVersion != null)
-                {
-                    result = result ^ obj.RequiredVersion.GetHashCode();
+                    if (property != null)
+                    {
+                        result ^= property.GetHashCode();
+                    }
                 }
             }
 

@@ -346,9 +346,7 @@ namespace Microsoft.PowerShell.Commands
             foreach (var version in ModuleUtils.GetModuleVersionSubfolders(moduleBase))
             {
                 // Skip the version folder if it is not equal to the required version or does not satisfy the minimum/maximum version criteria
-                if ((BaseRequiredVersion != null && !BaseRequiredVersion.Equals(version))
-                    || (BaseMinimumVersion != null && BaseRequiredVersion == null && version < BaseMinimumVersion)
-                    || (BaseMaximumVersion != null && BaseRequiredVersion == null && version > BaseMaximumVersion))
+                if (!ModuleIntrinsics.ModuleVersionMeetsConstraints(version, BaseRequiredVersion, BaseMinimumVersion, BaseMaximumVersion))
                 {
                     continue;
                 }
@@ -847,14 +845,24 @@ namespace Microsoft.PowerShell.Commands
             }
         }
 
-        internal List<PSModuleInfo> GetModule(string[] names, bool all, bool refresh)
+        /// <summary>
+        /// Get all modules matching a list of names, keyed by path, in order of discovery.
+        /// Names may be relative or absolute (rooted) paths.
+        /// Absolute paths are discovered first, with only one module per absolute path.
+        /// Names and relative paths are discovered after this, in module path order.
+        /// </summary>
+        /// <param name="names">The names, relative or absolute paths of modules to import.</param>
+        /// <param name="all">If true, includes nested modules.</param>
+        /// <param name="refresh">If true, refreshes the cached module definitions of modules found.</param>
+        /// <returns>A module discovery result that keeps modules ordered by path.</returns>
+        internal ModuleDiscoveryResult GetModule(string[] names, bool all, bool refresh)
         {
-            List<PSModuleInfo> modulesToReturn = new List<PSModuleInfo>();
+            var modules = new ModuleDiscoveryResult();
 
             // Two lists - one to hold Module Paths and one to hold Module Names
             // For Module Paths, we don't do any path resolution
-            List<String> modulePaths = new List<String>();
-            List<String> moduleNames = new List<String>();
+            var modulePaths = new List<string>();
+            var moduleNames = new List<string>();
 
             if (names != null)
             {
@@ -869,125 +877,125 @@ namespace Microsoft.PowerShell.Commands
                         moduleNames.Add(n);
                     }
                 }
-                modulesToReturn.AddRange(GetModuleForRootedPaths(modulePaths.ToArray(), all, refresh));
+
+                modules.Add(GetModuleForRootedPaths(modulePaths.ToArray(), all, refresh));
             }
 
             // If no names were passed to this function, then this API will return list of all available modules
             if (names == null || moduleNames.Count > 0)
             {
-                modulesToReturn.AddRange(GetModuleForNonRootedPaths(moduleNames.ToArray(), all, refresh));
+                modules.Add(GetModuleForNonRootedPaths(moduleNames.ToArray(), all, refresh));
             }
 
-            return modulesToReturn;
+            return modules;
         }
 
-        private IEnumerable<PSModuleInfo> GetModuleForNonRootedPaths(string[] names, bool all, bool refresh)
+        private ModuleDiscoveryResult GetModuleForNonRootedPaths(string[] names, bool all, bool refresh)
         {
             const WildcardOptions wildcardOptions = WildcardOptions.IgnoreCase | WildcardOptions.CultureInvariant;
             IEnumerable<WildcardPattern> patternList = SessionStateUtilities.CreateWildcardsFromStrings(names, wildcardOptions);
 
-            Dictionary<String, List<PSModuleInfo>> availableModules = GetAvailableLocallyModulesCore(names, all, refresh);
-            foreach (var entry in availableModules)
+            var modules = new ModuleDiscoveryResult();
+            foreach (KeyValuePair<string, IEnumerable<PSModuleInfo>> entry in GetAvailableLocallyModulesCore(names, all, refresh).GetOrderedPathModuleList())
             {
+                var filteredModuleList = new List<PSModuleInfo>();
                 foreach (PSModuleInfo module in entry.Value)
                 {
                     if (SessionStateUtilities.MatchesAnyWildcardPattern(module.Name, patternList, true))
                     {
-                        yield return module;
+                        filteredModuleList.Add(module);
                     }
                 }
+
+                modules.Add(entry.Key, filteredModuleList);
             }
+
+            return modules;
         }
 
-        private IEnumerable<PSModuleInfo> GetModuleForRootedPaths(string[] modulePaths, bool all, bool refresh)
+        private ModuleDiscoveryResult GetModuleForRootedPaths(string[] modulePaths, bool all, bool refresh)
         {
-            // This is to filter out duplicate modules
-            var modules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenModules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var modules = new ModuleDiscoveryResult();
 
-            foreach (string mp in modulePaths)
+            foreach (string rawModulePath in modulePaths)
             {
-                bool containsWildCards = false;
-
-                string modulePath = mp.TrimEnd(Utils.Separators.Backslash);
+                string modulePath = rawModulePath.TrimEnd(Utils.Separators.Backslash);
 
                 // If the given path contains wildcards, we won't throw error if no match module path is found.
-                if (WildcardPattern.ContainsWildcardCharacters(modulePath))
-                {
-                    containsWildCards = true;
-                }
+                bool containsWildCards = WildcardPattern.ContainsWildcardCharacters(modulePath);
 
-                //Now we resolve the possible paths in case it is relative path/path contains wildcards
+                // Now we resolve the possible paths in case it is relative path/path contains wildcards
                 var modulePathCollection = GetResolvedPathCollection(modulePath, this.Context);
 
-                if (modulePathCollection != null)
+                if (modulePathCollection == null && !containsWildCards)
                 {
-                    foreach (string resolvedModulePath in modulePathCollection)
-                    {
-                        string moduleName = Path.GetFileName(resolvedModulePath);
-                        bool isDirectory = Utils.NativeDirectoryExists(resolvedModulePath);
+                    WriteError(CreateModuleNotFoundError(modulePath));
+                    continue;
+                }
 
-                        // If the given path is a valid module file, we will load the specific file
-                        if (!isDirectory && ModuleIntrinsics.IsPowerShellModuleExtension(Path.GetExtension(moduleName)))
+                foreach (string resolvedModulePath in modulePathCollection)
+                {
+                    string moduleName = Path.GetFileName(resolvedModulePath);
+                    bool isDirectory = Utils.NativeDirectoryExists(resolvedModulePath);
+
+                    // If the given path is a valid module file, we will load the specific file
+                    if (!isDirectory && ModuleIntrinsics.IsPowerShellModuleExtension(Path.GetExtension(moduleName)))
+                    {
+                        PSModuleInfo module = CreateModuleInfoForGetModule(resolvedModulePath, refresh);
+                        if (module != null)
                         {
-                            PSModuleInfo module = CreateModuleInfoForGetModule(resolvedModulePath, refresh);
-                            if (module != null)
+                            // Filter out duplicate modules, taking the first
+                            if (!seenModules.Contains(resolvedModulePath))
                             {
-                                if (!modules.Contains(resolvedModulePath))
-                                {
-                                    modules.Add(resolvedModulePath);
-                                    yield return module;
-                                }
+                                modules.Add(resolvedModulePath, module);
                             }
                         }
-                        else
+
+                        continue;
+                    }
+
+                    // Given path is a directory, we first check if it is end with module version.
+                    Version version;
+                    if (Version.TryParse(moduleName, out version))
+                    {
+                        moduleName = Path.GetFileName(Directory.GetParent(resolvedModulePath).Name);
+                    }
+
+                    IEnumerable<string> availableModuleFiles = all
+                        ? ModuleUtils.GetAllAvailableModuleFiles(resolvedModulePath)
+                        : ModuleUtils.GetModuleVersionsFromAbsolutePath(resolvedModulePath);
+
+                    bool foundModule = false;
+                    foreach (string file in availableModuleFiles)
+                    {
+                        PSModuleInfo module = CreateModuleInfoForGetModule(file, refresh);
+                        if (module != null)
                         {
-                            // Given path is a directory, we first check if it is end with module version.
-                            Version version;
-                            if (Version.TryParse(moduleName, out version))
+                            if (String.Equals(moduleName, module.Name, StringComparison.OrdinalIgnoreCase))
                             {
-                                moduleName = Path.GetFileName(Directory.GetParent(resolvedModulePath).Name);
-                            }
+                                foundModule = true;
+                                // We need to list all versions of the module.
+                                string subModulePath = Path.GetDirectoryName(file);
 
-                            var availableModuleFiles = all
-                                ? ModuleUtils.GetAllAvailableModuleFiles(resolvedModulePath)
-                                : ModuleUtils.GetModuleVersionsFromAbsolutePath(resolvedModulePath);
-
-                            bool foundModule = false;
-                            foreach (string file in availableModuleFiles)
-                            {
-                                PSModuleInfo module = CreateModuleInfoForGetModule(file, refresh);
-                                if (module != null)
+                                // Filter out duplicate modules, taking the first
+                                if (!seenModules.Contains(subModulePath))
                                 {
-                                    if (String.Equals(moduleName, module.Name, StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        foundModule = true;
-                                        // We need to list all versions of the module.
-                                        string subModulePath = Path.GetDirectoryName(file);
-                                        if (!modules.Contains(subModulePath))
-                                        {
-                                            modules.Add(subModulePath);
-                                            yield return module;
-                                        }
-                                    }
+                                    modules.Add(subModulePath, module);
                                 }
-                            }
-
-                            // Write error only if Name has no wild cards
-                            if (!foundModule && !containsWildCards)
-                            {
-                                WriteError(CreateModuleNotFoundError(resolvedModulePath));
                             }
                         }
                     }
-                }
-                else
-                {
-                    if (!containsWildCards)
+
+                    // Write error only if Name has no wild cards
+                    if (!foundModule && !containsWildCards)
                     {
-                        WriteError(CreateModuleNotFoundError(modulePath));
+                        WriteError(CreateModuleNotFoundError(resolvedModulePath));
                     }
                 }
             }
+
+            return modules;
         }
 
         private ErrorRecord CreateModuleNotFoundError(string modulePath)
@@ -998,10 +1006,10 @@ namespace Microsoft.PowerShell.Commands
             return er;
         }
 
-        private Dictionary<String, List<PSModuleInfo>> GetAvailableLocallyModulesCore(string[] names, bool all, bool refresh)
+        private ModuleDiscoveryResult GetAvailableLocallyModulesCore(string[] names, bool all, bool refresh)
         {
-            var modules = new Dictionary<string, List<PSModuleInfo>>(StringComparer.OrdinalIgnoreCase);
-            var modulePaths = ModuleIntrinsics.GetModulePath(false, Context);
+            var modules = new ModuleDiscoveryResult();
+            var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             bool cleanupModuleAnalysisAppDomain = Context.TakeResponsibilityForModuleAnalysisAppDomain();
 
@@ -1018,9 +1026,9 @@ namespace Microsoft.PowerShell.Commands
                         // Add the path in $env:PSModulePath as the keys of the dictionary
                         // If the paths are repeated, ignore the repetitions
                         string uniquePath = path.TrimEnd(Utils.Separators.Directory);
-                        if (!modules.ContainsKey(uniquePath))
+                        if (!seenPaths.Contains(uniquePath))
                         {
-                            modules.Add(uniquePath, availableModules.OrderBy(m => m.Name).ToList());
+                            modules.Add(uniquePath, availableModules.OrderBy(m => m.Name));
                         }
                     }
                     catch (IOException)
@@ -1191,10 +1199,10 @@ namespace Microsoft.PowerShell.Commands
                     moduleInfo = LoadModuleManifest(
                             scriptInfo,
                             flags /* - don't write errors, don't load elements */,
-                            null,
-                            null,
-                            null,
-                            null);
+                            minimumVersion: null,
+                            maximumVersion: null,
+                            requiredVersion: null,
+                            requiredModuleGuid: null);
                 }
                 else
                 {
@@ -1504,7 +1512,7 @@ namespace Microsoft.PowerShell.Commands
                             moduleManifestPath);
                         InvalidOperationException ioe = new InvalidOperationException(message);
                         ErrorRecord er = new ErrorRecord(ioe,
-                            "Modules_ModuleManifestCannotContainBothModuleToProcessAndRootModule",
+                            "Modules_" + nameof(Modules.ModuleManifestCannotContainBothModuleToProcessAndRootModule),
                             ErrorCategory.InvalidOperation, moduleManifestPath);
                         WriteError(er);
                     }
@@ -1526,7 +1534,7 @@ namespace Microsoft.PowerShell.Commands
                     PSInvalidOperationException invalidOperation = PSTraceSource.NewInvalidOperationException(
                         Modules.WildCardNotAllowedInModuleToProcessAndInNestedModules,
                         moduleManifestPath);
-                    invalidOperation.SetErrorId("Modules_WildCardNotAllowedInModuleToProcessAndInNestedModules");
+                    invalidOperation.SetErrorId("Modules_" + nameof(Modules.WildCardNotAllowedInModuleToProcessAndInNestedModules));
                     throw invalidOperation;
                 }
 
@@ -1574,7 +1582,7 @@ namespace Microsoft.PowerShell.Commands
                     PSInvalidOperationException invalidOperation = PSTraceSource.NewInvalidOperationException(
                         Modules.WildCardNotAllowedInModuleToProcessAndInNestedModules,
                         moduleManifestPath);
-                    invalidOperation.SetErrorId("Modules_WildCardNotAllowedInModuleToProcessAndInNestedModules");
+                    invalidOperation.SetErrorId("Modules_" + nameof(Modules.WildCardNotAllowedInModuleToProcessAndInNestedModules));
                     throw invalidOperation;
                 }
                 // See if this module is already loaded. Since the manifest entry may not
@@ -1601,19 +1609,14 @@ namespace Microsoft.PowerShell.Commands
                 // TODO/FIXME: use IsModuleAlreadyLoaded to get consistent behavior
                 // if (IsModuleAlreadyLoaded(loadedModule) &&
                 //    ((manifestProcessingFlags & ManifestProcessingFlags.LoadElements) == ManifestProcessingFlags.LoadElements))
-                if (loadedModule != null &&
-                    (BaseRequiredVersion == null || loadedModule.Version.Equals(BaseRequiredVersion)) &&
-                    ((BaseMinimumVersion == null && BaseMaximumVersion == null)
-                     ||
-                     (BaseMaximumVersion != null && BaseMinimumVersion == null &&
-                      loadedModule.Version <= BaseMaximumVersion)
-                     ||
-                     (BaseMaximumVersion == null && BaseMinimumVersion != null &&
-                      loadedModule.Version >= BaseMinimumVersion)
-                     ||
-                     (BaseMaximumVersion != null && BaseMinimumVersion != null &&
-                      loadedModule.Version >= BaseMinimumVersion && loadedModule.Version <= BaseMaximumVersion)) &&
-                    (BaseGuid == null || loadedModule.Guid.Equals(BaseGuid)) && importingModule)
+                if (loadedModule != null
+                    && importingModule
+                    && ModuleIntrinsics.ModuleMatchesConstraints(
+                        loadedModule,
+                        guid: BaseGuid,
+                        requiredVersion: BaseRequiredVersion,
+                        minimumVersion: BaseMinimumVersion,
+                        maximumVersion: BaseMaximumVersion))
                 {
                     if (!BaseForce)
                     {
@@ -1655,7 +1658,7 @@ namespace Microsoft.PowerShell.Commands
             }
 
             Guid? manifestGuid;
-            if (!GetScalarFromData(data, moduleManifestPath, "guid", manifestProcessingFlags, out manifestGuid))
+            if (!GetScalarFromData(data, moduleManifestPath, "Guid", manifestProcessingFlags, out manifestGuid))
             {
                 containedErrors = true;
                 if (bailOnFirstError) return null;
@@ -1679,8 +1682,11 @@ namespace Microsoft.PowerShell.Commands
                     {
                         message = StringUtil.Format(Modules.ModuleManifestMissingModuleVersion, moduleManifestPath);
                         MissingMemberException mm = new MissingMemberException(message);
-                        ErrorRecord er = new ErrorRecord(mm, "Modules_InvalidManifest",
-                            ErrorCategory.ResourceUnavailable, moduleManifestPath);
+                        ErrorRecord er = new ErrorRecord(
+                            mm,
+                            "Modules_InvalidManifest",
+                            ErrorCategory.ResourceUnavailable,
+                            moduleManifestPath);
                         WriteError(er);
                     }
                     if (bailOnFirstError) return null;
@@ -1732,8 +1738,11 @@ namespace Microsoft.PowerShell.Commands
                             message = StringUtil.Format(Modules.InvalidModuleManifestVersion, moduleManifestPath,
                                 moduleVersion.ToString(), parent.FullName);
                             var ioe = new InvalidOperationException(message);
-                            var er = new ErrorRecord(ioe, "Modules_InvalidModuleManifestVersion",
-                                ErrorCategory.InvalidArgument, moduleManifestPath);
+                            var er = new ErrorRecord(
+                                ioe,
+                                "Modules_" + nameof(Modules.InvalidModuleManifestVersion),
+                                ErrorCategory.InvalidArgument,
+                                moduleManifestPath);
                             WriteError(er);
                         }
 
@@ -1763,8 +1772,11 @@ namespace Microsoft.PowerShell.Commands
                             currentPowerShellVersion,
                             moduleManifestPath, powerShellVersion);
                         InvalidOperationException ioe = new InvalidOperationException(message);
-                        ErrorRecord er = new ErrorRecord(ioe, "Modules_InsufficientPowerShellVersion",
-                            ErrorCategory.ResourceUnavailable, moduleManifestPath);
+                        ErrorRecord er = new ErrorRecord(
+                            ioe,
+                            "Modules_InsufficientPowerShellVersion",
+                            ErrorCategory.ResourceUnavailable,
+                            moduleManifestPath);
                         WriteError(er);
                     }
                     if (bailOnFirstError) return null;
@@ -1799,8 +1811,11 @@ namespace Microsoft.PowerShell.Commands
                             message = StringUtil.Format(Modules.InvalidPowerShellHostName,
                                 currentHostName, moduleManifestPath, requestedHostName);
                             InvalidOperationException ioe = new InvalidOperationException(message);
-                            ErrorRecord er = new ErrorRecord(ioe, "Modules_InvalidPowerShellHostName",
-                                ErrorCategory.ResourceUnavailable, moduleManifestPath);
+                            ErrorRecord er = new ErrorRecord(
+                                ioe,
+                                "Modules_" + nameof(Modules.InvalidPowerShellHostName),
+                                ErrorCategory.ResourceUnavailable,
+                                moduleManifestPath);
                             WriteError(er);
                         }
                         if (bailOnFirstError) return null;
@@ -1837,8 +1852,11 @@ namespace Microsoft.PowerShell.Commands
                             message = StringUtil.Format(Modules.InvalidPowerShellHostVersion,
                                 currentHostName, currentHostVersion, moduleManifestPath, requestedHostVersion);
                             InvalidOperationException ioe = new InvalidOperationException(message);
-                            ErrorRecord er = new ErrorRecord(ioe, "Modules_InsufficientPowerShellHostVersion",
-                                ErrorCategory.ResourceUnavailable, moduleManifestPath);
+                            ErrorRecord er = new ErrorRecord(
+                                ioe,
+                                "Modules_InsufficientPowerShellHostVersion",
+                                ErrorCategory.ResourceUnavailable,
+                                moduleManifestPath);
                             WriteError(er);
                         }
                         if (bailOnFirstError) return null;
@@ -1876,8 +1894,11 @@ namespace Microsoft.PowerShell.Commands
                         message = StringUtil.Format(Modules.InvalidProcessorArchitecture,
                             actualCurrentArchitecture, moduleManifestPath, requiredProcessorArchitecture);
                         InvalidOperationException ioe = new InvalidOperationException(message);
-                        ErrorRecord er = new ErrorRecord(ioe, "Modules_InvalidProcessorArchitecture",
-                            ErrorCategory.ResourceUnavailable, moduleManifestPath);
+                        ErrorRecord er = new ErrorRecord(
+                            ioe,
+                            "Modules_" + nameof(Modules.InvalidProcessorArchitecture),
+                            ErrorCategory.ResourceUnavailable,
+                            moduleManifestPath);
                         WriteError(er);
                     }
                     if (bailOnFirstError) return null;
@@ -1905,8 +1926,11 @@ namespace Microsoft.PowerShell.Commands
                         message = StringUtil.Format(Modules.ModuleManifestInsufficientCLRVersion, currentClrVersion,
                             moduleManifestPath, requestedClrVersion);
                         InvalidOperationException ioe = new InvalidOperationException(message);
-                        ErrorRecord er = new ErrorRecord(ioe, "Modules_InsufficientCLRVersion",
-                            ErrorCategory.ResourceUnavailable, moduleManifestPath);
+                        ErrorRecord er = new ErrorRecord(
+                            ioe,
+                            "Modules_" + nameof(Modules.InsufficientCLRVersion),
+                            ErrorCategory.ResourceUnavailable,
+                            moduleManifestPath);
                         WriteError(er);
                     }
                     if (bailOnFirstError) return null;
@@ -1937,8 +1961,11 @@ namespace Microsoft.PowerShell.Commands
                         message = StringUtil.Format(Modules.InvalidDotNetFrameworkVersion,
                             moduleManifestPath, requestedDotNetFrameworkVersion);
                         InvalidOperationException ioe = new InvalidOperationException(message);
-                        ErrorRecord er = new ErrorRecord(ioe, "Modules_InsufficientDotNetFrameworkVersion",
-                            ErrorCategory.ResourceUnavailable, moduleManifestPath);
+                        ErrorRecord er = new ErrorRecord(
+                            ioe,
+                            "Modules_" + nameof(Modules.InsufficientDotNetFrameworkVersion),
+                            ErrorCategory.ResourceUnavailable,
+                            moduleManifestPath);
                         WriteError(er);
                     }
                     if (bailOnFirstError) return null;
@@ -2046,7 +2073,7 @@ namespace Microsoft.PowerShell.Commands
                         PSInvalidOperationException invalidOperation = PSTraceSource.NewInvalidOperationException(
                             Modules.WildCardNotAllowedInModuleToProcessAndInNestedModules,
                             moduleManifestPath);
-                        invalidOperation.SetErrorId("Modules_WildCardNotAllowedInModuleToProcessAndInNestedModules");
+                        invalidOperation.SetErrorId("Modules_" + nameof(Modules.WildCardNotAllowedInModuleToProcessAndInNestedModules));
                         throw invalidOperation;
                     }
 
@@ -2058,8 +2085,9 @@ namespace Microsoft.PowerShell.Commands
                             message = StringUtil.Format(Modules.WorkflowModuleNotSupported, s.Name);
                             WriteError(new ErrorRecord(
                                            new NotSupportedException(message),
-                                           "Modules_WorkflowModuleNotSupported",
-                                           ErrorCategory.InvalidOperation, null));
+                                           "Modules_" + nameof(Modules.WorkflowModuleNotSupported),
+                                           ErrorCategory.InvalidOperation,
+                                           null));
                         }
 
                         containedErrors = true;
@@ -2173,7 +2201,7 @@ namespace Microsoft.PowerShell.Commands
                             PSInvalidOperationException invalidOperation = PSTraceSource.NewInvalidOperationException(
                                 Modules.WildCardNotAllowedInRequiredAssemblies,
                                 moduleManifestPath);
-                            invalidOperation.SetErrorId("Modules_WildCardNotAllowedInRequiredAssemblies");
+                            invalidOperation.SetErrorId("Modules_" + nameof(Modules.WildCardNotAllowedInRequiredAssemblies));
                             throw invalidOperation;
                         }
                         else
@@ -2370,7 +2398,7 @@ namespace Microsoft.PowerShell.Commands
                 {
                     try
                     {
-                        iss.Bind(Context, /*updateOnly*/ true);
+                        iss.Bind(Context, updateOnly: true);
                     }
                     catch (Exception e)
                     {
@@ -5131,13 +5159,15 @@ namespace Microsoft.PowerShell.Commands
                 //if (!BaseForce &&
                 //    IsModuleAlreadyLoaded(module) &&
                 //    ((manifestProcessingFlags & ManifestProcessingFlags.LoadElements) == ManifestProcessingFlags.LoadElements))
-                if (!BaseForce && module != null &&
-                    (BaseRequiredVersion == null || module.Version.Equals(BaseRequiredVersion)) &&
-                    ((BaseMinimumVersion == null && BaseMaximumVersion == null)
-                        || (BaseMaximumVersion != null && BaseMinimumVersion == null && module.Version <= BaseMaximumVersion)
-                        || (BaseMaximumVersion == null && BaseMinimumVersion != null && module.Version >= BaseMinimumVersion)
-                        || (BaseMaximumVersion != null && BaseMinimumVersion != null && module.Version >= BaseMinimumVersion && module.Version <= BaseMaximumVersion)) &&
-                    (BaseGuid == null || module.Guid.Equals(BaseGuid)) && importingModule)
+                if (!BaseForce
+                    && module != null
+                    && importingModule
+                    && ModuleIntrinsics.ModuleMatchesConstraints(
+                        module,
+                        guid: BaseGuid,
+                        requiredVersion: BaseRequiredVersion,
+                        minimumVersion: BaseMinimumVersion,
+                        maximumVersion: BaseMaximumVersion))
                 {
                     moduleFileFound = true;
                     module = Context.Modules.ModuleTable[fileName];
@@ -5182,9 +5212,9 @@ namespace Microsoft.PowerShell.Commands
                 {
                     moduleFileFound = true;
                     // Win8: 325243 - Added the version check so that we do not unload modules with the same name but different version
-                    if (BaseForce && module != null &&
-                        (this.BaseRequiredVersion == null || module.Version.Equals(this.BaseRequiredVersion)) &&
-                        (BaseGuid == null || module.Guid.Equals(BaseGuid)))
+                    if (BaseForce
+                        && module != null
+                        && ModuleIntrinsics.ModuleMatchesConstraints(module, guid: BaseGuid, requiredVersion: BaseRequiredVersion))
                     // TODO/FIXME: use IsModuleAlreadyLoaded to get consistent behavior
                     // TODO/FIXME: (for example the checks above are not lookint at this.BaseMinimumVersion)
                     //if (BaseForce && IsModuleAlreadyLoaded(module))
@@ -6112,7 +6142,7 @@ namespace Microsoft.PowerShell.Commands
                 else
                 {
                     // This is a named module
-                    processedModules.AddRange(GetModule(new string[] { moduleToProcess }, false, true));
+                    processedModules.AddRange(GetModule(new string[] { moduleToProcess }, all: false, refresh: false).GetModulesInPathOrder());
                 }
 
                 if ((processedModules == null) || (processedModules.Count == 0))
@@ -7251,6 +7281,94 @@ namespace Microsoft.PowerShell.Commands
 
         // The list of aliases detected from the binary
         internal List<Tuple<string, string>> DetectedAliases { get; set; }
+    }
+
+    /// <summary>
+    /// Convenient aggregator class to manage results of local module discovery.
+    /// Remembers the order in which modules were added and can reproduce them in that order.
+    /// </summary>
+    internal class ModuleDiscoveryResult
+    {
+        private readonly List<KeyValuePair<string, IEnumerable<PSModuleInfo>>> _modules;
+
+        /// <summary>
+        /// Create a new empty module discovery result.
+        /// </summary>
+        public ModuleDiscoveryResult()
+        {
+            _modules = new List<KeyValuePair<string, IEnumerable<PSModuleInfo>>>();
+        }
+
+        /// <summary>
+        /// Get the total number of modules in the module discovery result.
+        /// </summary>
+        public int Count
+        {
+            get
+            {
+                int count = 0;
+                foreach (KeyValuePair<string, IEnumerable<PSModuleInfo>> moduleResult in _modules)
+                {
+                    count += moduleResult.Value.Count();
+                }
+                return count;
+            }
+        }
+
+        /// <summary>
+        /// Retrieve an enumeration of modules in this result, in the order
+        /// of their path discovery (i.e. the order they were added to the result).
+        /// </summary>
+        public IEnumerable<PSModuleInfo> GetModulesInPathOrder()
+        {
+            var modules = new List<PSModuleInfo>();
+            foreach (KeyValuePair<string, IEnumerable<PSModuleInfo>> module in _modules)
+            {
+                modules.AddRange(module.Value);
+            }
+            return modules;
+        }
+
+        /// <summary>
+        /// Get a list of key/value pairs of paths and the modules on those paths.
+        /// </summary>
+        public IEnumerable<KeyValuePair<string, IEnumerable<PSModuleInfo>>> GetOrderedPathModuleList()
+        {
+            return _modules;
+        }
+
+        /// <summary>
+        /// Add a new module path entry to the module discovery result.
+        /// </summary>
+        /// <param name="path">The path containing the modules.</param>
+        /// <param name="modules">The modules on that path.</param>
+        internal void Add(string path, IEnumerable<PSModuleInfo> modules)
+        {
+            _modules.Add(new KeyValuePair<string, IEnumerable<PSModuleInfo>>(path, modules));
+        }
+
+        /// <summary>
+        /// Add a singleton module at a given path to the result.
+        /// </summary>
+        /// <param name="path">The path where the module is located.</param>
+        /// <param name="module">The module at the given path.</param>
+        internal void Add(string path, PSModuleInfo module)
+        {
+            Add(path, new PSModuleInfo[] { module });
+        }
+
+        /// <summary>
+        /// Add a subordinate module discovery result to this one, appending its entries
+        /// to the existing ones.
+        /// </summary>
+        /// <param name="modules">The module discovery result to add to this one.</param>
+        internal void Add(ModuleDiscoveryResult modules)
+        {
+            foreach (KeyValuePair<string, IEnumerable<PSModuleInfo>> moduleResult in modules.GetOrderedPathModuleList())
+            {
+                Add(moduleResult.Key, moduleResult.Value);
+            }
+        }
     }
 
     #endregion ModuleCmdletBase

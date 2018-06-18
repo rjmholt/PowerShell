@@ -320,7 +320,7 @@ namespace Microsoft.PowerShell.Commands
                 ArgumentException argumentException = new ArgumentException(errorMessage);
                 ErrorRecord errorRecord = new ErrorRecord(
                     argumentException,
-                    "RemoteDiscoveryWorksOnlyInListAvailableMode",
+                    nameof(Modules.RemoteDiscoveryWorksOnlyInListAvailableMode),
                     ErrorCategory.InvalidArgument,
                     null);
                 this.ThrowTerminatingError(errorRecord);
@@ -334,9 +334,9 @@ namespace Microsoft.PowerShell.Commands
         {
             // Name and FullyQualifiedName should not be specified at the same time.
             // Throw out terminating error if this is the case.
-            if ((Name != null) && (FullyQualifiedName != null))
+            if (Name != null && FullyQualifiedName != null)
             {
-                string errMsg = StringUtil.Format(SessionStateStrings.GetContent_TailAndHeadCannotCoexist, "Name", "FullyQualifiedName");
+                string errMsg = StringUtil.Format(SessionStateStrings.GetContent_TailAndHeadCannotCoexist, nameof(Name), nameof(FullyQualifiedName));
                 ErrorRecord error = new ErrorRecord(new InvalidOperationException(errMsg), "NameAndFullyQualifiedNameCannotBeSpecifiedTogether", ErrorCategory.InvalidOperation, null);
                 ThrowTerminatingError(error);
             }
@@ -347,7 +347,7 @@ namespace Microsoft.PowerShell.Commands
                 strNames.AddRange(Name);
             }
 
-            var moduleSpecTable = new Dictionary<string, ModuleSpecification>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, ModuleSpecification> moduleSpecTable = null;
             if (FullyQualifiedName != null)
             {
                 moduleSpecTable = FullyQualifiedName.ToDictionary(moduleSpecification => moduleSpecification.Name, StringComparer.OrdinalIgnoreCase);
@@ -358,65 +358,69 @@ namespace Microsoft.PowerShell.Commands
 
             if (ParameterSetName.Equals(ParameterSet_Loaded, StringComparison.OrdinalIgnoreCase))
             {
-                AssertNameDoesNotResolveToAPath(names,
-                                                Modules.ModuleDiscoveryForLoadedModulesWorksOnlyForUnQualifiedNames,
-                                                "ModuleDiscoveryForLoadedModulesWorksOnlyForUnQualifiedNames");
+                AssertNameDoesNotResolveToAPath(
+                    names,
+                    Modules.ModuleDiscoveryForLoadedModulesWorksOnlyForUnQualifiedNames,
+                    nameof(Modules.ModuleDiscoveryForLoadedModulesWorksOnlyForUnQualifiedNames));
                 GetLoadedModules(names, moduleSpecTable, this.All);
+                return;
             }
-            else if (ParameterSetName.Equals(ParameterSet_AvailableLocally, StringComparison.OrdinalIgnoreCase))
+
+            if (ParameterSetName.Equals(ParameterSet_AvailableLocally, StringComparison.OrdinalIgnoreCase))
             {
                 if (ListAvailable.IsPresent)
                 {
                     GetAvailableLocallyModules(names, moduleSpecTable, this.All);
+                    return;
                 }
-                else
-                {
-                    AssertNameDoesNotResolveToAPath(names,
-                                                    Modules.ModuleDiscoveryForLoadedModulesWorksOnlyForUnQualifiedNames,
-                                                    "ModuleDiscoveryForLoadedModulesWorksOnlyForUnQualifiedNames");
-                    GetLoadedModules(names, moduleSpecTable, this.All);
-                }
+
+                AssertNameDoesNotResolveToAPath(
+                    names,
+                    Modules.ModuleDiscoveryForLoadedModulesWorksOnlyForUnQualifiedNames,
+                    nameof(Modules.ModuleDiscoveryForLoadedModulesWorksOnlyForUnQualifiedNames));
+                GetLoadedModules(names, moduleSpecTable, this.All);
+                return;
             }
-            else if (ParameterSetName.Equals(ParameterSet_AvailableInPsrpSession, StringComparison.OrdinalIgnoreCase))
+
+            if (ParameterSetName.Equals(ParameterSet_AvailableInPsrpSession, StringComparison.OrdinalIgnoreCase))
             {
                 AssertListAvailableMode();
                 AssertNameDoesNotResolveToAPath(names,
                                                 Modules.RemoteDiscoveryWorksOnlyForUnQualifiedNames,
-                                                "RemoteDiscoveryWorksOnlyForUnQualifiedNames");
-
+                                                nameof(Modules.RemoteDiscoveryWorksOnlyForUnQualifiedNames));
                 GetAvailableViaPsrpSession(names, moduleSpecTable, this.PSSession);
+                return;
             }
-            else if (ParameterSetName.Equals(ParameterSet_AvailableInCimSession, StringComparison.OrdinalIgnoreCase))
+
+            if (ParameterSetName.Equals(ParameterSet_AvailableInCimSession, StringComparison.OrdinalIgnoreCase))
             {
                 AssertListAvailableMode();
                 AssertNameDoesNotResolveToAPath(names,
                                                 Modules.RemoteDiscoveryWorksOnlyForUnQualifiedNames,
-                                                "RemoteDiscoveryWorksOnlyForUnQualifiedNames");
-
+                                                nameof(Modules.RemoteDiscoveryWorksOnlyForUnQualifiedNames));
                 GetAvailableViaCimSession(names, moduleSpecTable, this.CimSession,
                                           this.CimResourceUri, this.CimNamespace);
+                return;
             }
-            else
-            {
-                Dbg.Assert(false, "Unrecognized parameter set");
-            }
+
+            Dbg.Assert(false, "Unrecognized parameter set");
         }
 
         private void AssertNameDoesNotResolveToAPath(string[] names, string stringFormat, string resourceId)
         {
             if (names != null)
             {
-                foreach (var n in names)
+                foreach (var name in names)
                 {
-                    if (n.IndexOf(StringLiterals.DefaultPathSeparator) != -1 || n.IndexOf(StringLiterals.AlternatePathSeparator) != -1)
+                    if (name.IndexOf(StringLiterals.DefaultPathSeparator) != -1 || name.IndexOf(StringLiterals.AlternatePathSeparator) != -1)
                     {
-                        string errorMessage = StringUtil.Format(stringFormat, n);
+                        string errorMessage = StringUtil.Format(stringFormat, name);
                         var argumentException = new ArgumentException(errorMessage);
                         var errorRecord = new ErrorRecord(
                             argumentException,
                             resourceId,
                             ErrorCategory.InvalidArgument,
-                            n);
+                            name);
                         this.ThrowTerminatingError(errorRecord);
                     }
                 }
@@ -424,71 +428,115 @@ namespace Microsoft.PowerShell.Commands
         }
 
         /// <summary>
-        /// Determine whether a module info matches a given module specification table and specified PSEdition value.
+        /// Write all the available modules in a CIM session to the output stream.
         /// </summary>
-        /// <param name="moduleInfo"></param>
-        /// <param name="moduleSpecTable"></param>
-        /// <param name="edition"></param>
-        /// <returns></returns>
-        private static bool ModuleMatch(PSModuleInfo moduleInfo, IDictionary<string, ModuleSpecification> moduleSpecTable, string edition)
-        {
-            ModuleSpecification moduleSpecification;
-            return (String.IsNullOrEmpty(edition) || moduleInfo.CompatiblePSEditions.Contains(edition, StringComparer.OrdinalIgnoreCase)) &&
-                   (!moduleSpecTable.TryGetValue(moduleInfo.Name, out moduleSpecification) || ModuleIntrinsics.IsModuleMatchingModuleSpec(moduleInfo, moduleSpecification));
-        }
-
+        /// <param name="names">The names of the modules to look for, with null meaning all.</param>
+        /// <param name="moduleSpecTable">The module specifications to match modules against.</param>
+        /// <param name="cimSession">The CIM session to get available modules from.</param>
+        /// <param name="resourceUri">The URI of the CIM resource.</param>
+        /// <param name="cimNamespace">The CIM namespace of the resource.</param>
         private void GetAvailableViaCimSession(IEnumerable<string> names, IDictionary<string, ModuleSpecification> moduleSpecTable,
                                                CimSession cimSession, Uri resourceUri, string cimNamespace)
         {
-            var remoteModules = GetAvailableViaCimSessionCore(names, cimSession, resourceUri, cimNamespace);
+            IEnumerable<PSModuleInfo> remoteModules = GetAvailableViaCimSessionCore(names, cimSession, resourceUri, cimNamespace)
+                .Where(remoteModule => ModuleMatch(remoteModule, moduleSpecTable, PSEdition));
 
-            foreach (var remoteModule in remoteModules.Where(remoteModule => ModuleMatch(remoteModule, moduleSpecTable, PSEdition))
-                )
+            foreach (PSModuleInfo remoteModule in remoteModules)
             {
-                RemoteDiscoveryHelper.AssociatePSModuleInfoWithSession(remoteModule, cimSession, resourceUri,
-                                                                       cimNamespace);
+                RemoteDiscoveryHelper.AssociatePSModuleInfoWithSession(
+                    remoteModule,
+                    cimSession,
+                    resourceUri,
+                    cimNamespace);
                 this.WriteObject(remoteModule);
             }
         }
 
+        /// <summary>
+        /// Write all available modules in a given PowerShell Remote Protocol session to the output stream.
+        /// </summary>
+        /// <param name="names">The names of the modules to get, with null meaning all.</param>
+        /// <param name="moduleSpecTable">The module specifications to match modules against.</param>
+        /// <param name="session">The PSRP session to get available modules from.</param>
         private void GetAvailableViaPsrpSession(string[] names, IDictionary<string, ModuleSpecification> moduleSpecTable, PSSession session)
         {
-            var remoteModules = GetAvailableViaPsrpSessionCore(names, session.Runspace);
+            IEnumerable<PSModuleInfo> remoteModules = GetAvailableViaPsrpSessionCore(names, session.Runspace)
+                .Where(remoteModule => ModuleMatch(remoteModule, moduleSpecTable, PSEdition));
 
-            foreach (var remoteModule in remoteModules.Where(remoteModule => ModuleMatch(remoteModule, moduleSpecTable, PSEdition))
-                )
+            foreach (PSModuleInfo remoteModule in remoteModules)
             {
                 RemoteDiscoveryHelper.AssociatePSModuleInfoWithSession(remoteModule, session);
                 this.WriteObject(remoteModule);
             }
         }
 
+        /// <summary>
+        /// Write all available modules in the local PowerShell session to the output stream.
+        /// </summary>
+        /// <param name="names">The names of the modules to get, with null meaning all.</param>
+        /// <param name="moduleSpecTable">The module specifications to match modules against.</param>
+        /// <param name="all">If true, include all nested modules regardless of visibility, otherwise only list available installed modules.</param>
         private void GetAvailableLocallyModules(string[] names, IDictionary<string, ModuleSpecification> moduleSpecTable, bool all)
         {
-            var refresh = Refresh.IsPresent;
-            var modules = GetModule(names, all, refresh);
+            bool refresh = Refresh.IsPresent;
+            IEnumerable<PSModuleInfo> modules = GetModule(names, all, refresh)
+                .GetModulesInPathOrder()
+                .Where(module => ModuleMatch(module, moduleSpecTable, PSEdition));
 
-            foreach (
-                var psModule in
-                    modules.Where(module => ModuleMatch(module, moduleSpecTable, PSEdition)).Select(module => new PSObject(module))
-                )
+            foreach (PSModuleInfo psModule in modules)
             {
-                psModule.TypeNames.Insert(0, "ModuleInfoGrouping");
+                var modInfoObj = new PSObject(psModule);
+                modInfoObj.TypeNames.Insert(0, "ModuleInfoGrouping");
                 WriteObject(psModule);
             }
         }
 
+        /// <summary>
+        /// Write all modules loaded in the current PowerShell session to the output stream.
+        /// </summary>
+        /// <param name="names">The names of the modules to get, with null meaning all.</param>
+        /// <param name="moduleSpecTable">The module specifications to match modules against.</param>
+        /// <param name="all">If true, include nested modules regardless of visibility.</param>
         private void GetLoadedModules(string[] names, IDictionary<string, ModuleSpecification> moduleSpecTable, bool all)
         {
-            var modulesToWrite = Context.Modules.GetModules(names, all);
+            IEnumerable<PSModuleInfo> modulesToWrite = Context.Modules.GetModules(names, all)
+                .Where(moduleInfo => ModuleMatch(moduleInfo, moduleSpecTable, PSEdition));
 
-            foreach (
-                var moduleInfo in
-                    modulesToWrite.Where(moduleInfo => ModuleMatch(moduleInfo, moduleSpecTable, PSEdition))
-                )
+            foreach (PSModuleInfo moduleInfo in modulesToWrite)
             {
                 WriteObject(moduleInfo);
             }
+        }
+
+        /// <summary>
+        /// Determine whether a module info matches a given module specification table and specified PSEdition value.
+        /// </summary>
+        /// <param name="moduleInfo">The module info object to check for matching the given constraints.</param>
+        /// <param name="moduleSpecTable">If non-null, specifies a table to look up the attributes the module must have.</param>
+        /// <param name="edition">The PowerShell edition the module must declare compatibility with.</param>
+        /// <returns>True if the given module info object satisfies all the provided constraints.</returns>
+        private static bool ModuleMatch(PSModuleInfo moduleInfo, IDictionary<string, ModuleSpecification> moduleSpecTable, string edition)
+        {
+            if (!String.IsNullOrEmpty(edition) && !moduleInfo.CompatiblePSEditions.Contains(edition, StringComparer.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (moduleSpecTable == null || moduleSpecTable.Count == 0)
+            {
+                return true;
+            }
+
+            if (moduleSpecTable.TryGetValue(moduleInfo.Name, out ModuleSpecification moduleSpecification))
+            {
+                return ModuleIntrinsics.IsModuleMatchingModuleSpec(moduleInfo, moduleSpecification);
+            }
+
+            // This shouldn't return true when it fails to find a table entry,
+            // but the table doesn't handle relative paths well. It's not a problem
+            // since the internal GetModule() filters the names properly, but makes
+            // the logic of this method hard to describe sensibly.
+            return true;
         }
     }
 
