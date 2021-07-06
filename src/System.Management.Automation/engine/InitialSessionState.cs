@@ -4528,6 +4528,12 @@ end {
                 ScopedItemOptions.None,
                 new ArgumentTypeConverterAttribute(typeof(ActionPreference))),
             new SessionStateVariableEntry(
+                SpecialVariables.PSNativeCommandUseErrorActionPreference,
+                value: false,
+                RunspaceInit.PSNativeCommandUseErrorActionPreferenceDescription,
+                ScopedItemOptions.None,
+                new ArgumentTypeConverterAttribute(typeof(bool))),
+            new SessionStateVariableEntry(
                 SpecialVariables.VerbosePreference,
                 DefaultVerbosePreference,
                 RunspaceInit.VerbosePreferenceDescription,

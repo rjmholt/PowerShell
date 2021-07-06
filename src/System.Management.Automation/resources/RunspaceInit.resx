@@ -171,6 +171,9 @@
   <data name="ProgressPreferenceDescription" xml:space="preserve">
     <value>Dictates the action taken when progress records are delivered</value>
   </data>
+  <data name="PSNativeCommandUseErrorActionPreferenceDescription" xml:space="preserve">
+    <value>Dictates whether native command execution follows ErrorActionPreference. If true, ErrorActionPreference will apply to native commands, and otherwise native command errors are always non-terminating.</value>
+  </data>
   <data name="VerbosePreferenceDescription" xml:space="preserve">
     <value>Dictates the action taken when a Verbose message is delivered</value>
   </data>

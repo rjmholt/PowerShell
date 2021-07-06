@@ -235,6 +235,10 @@ namespace System.Management.Automation
 
         internal static readonly VariablePath ProgressPreferenceVarPath = new VariablePath(ProgressPreference);
 
+        internal const string PSNativeCommandUseErrorActionPreference = nameof(PSNativeCommandUseErrorActionPreference);
+
+        internal static readonly VariablePath PSNativeCommandUseErrorActionPreferenceVarPath = new VariablePath(PSNativeCommandUseErrorActionPreference);
+
         internal const string VerbosePreference = "VerbosePreference";
 
         internal static readonly VariablePath VerbosePreferenceVarPath = new VariablePath(VerbosePreference);
